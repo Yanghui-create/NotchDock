@@ -179,6 +179,10 @@ NotchDock.exe --render D:\some\dir
 
 注意剪贴板历史是明文存储的，密码之类复制过的内容请自行在界面里删除；`.gitignore` 也把这些数据文件排除了，避免之后误提交。
 
+## 许可证
+
+[MIT](LICENSE) © 2026 Yanghui-create
+
 ## 可继续做的方向
 
 - 待办用 Windows 原生 Toast 做持久提醒（需注册 AUMID 快捷方式），现在只有刘海内提示 + 托盘气泡。
