@@ -119,14 +119,86 @@
                       Click="Tab_Click" />
             </StackPanel>
 
+            <!-- 唯一设置入口：iOS「设置」齿轮（原来 ⚙ + ⋯ 两个入口容易让人犯迷糊，
+                 现在合成一个；⋯ 菜单里的功能全部搬进了设置面板，托盘菜单不受影响） -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
               <Button x:Name="BtnAction" Style="{StaticResource GhostStyle}" Content="全部清除"
                       Click="BtnAction_Click" Margin="0,0,2,0" />
-              <Button x:Name="BtnSettings" Style="{StaticResource GhostStyle}" Content="⚙"
-                      FontSize="13" Padding="9,2" Margin="0,0,2,0" Click="OpenSettings_Click"
-                      ToolTip="设置（全局快捷键等）" />
-              <Button x:Name="BtnMenu" Style="{StaticResource GhostStyle}" Content="⋯"
-                      FontSize="16" Padding="10,1" Click="BtnMenu_Click" />
+              <Button x:Name="BtnSettings" Style="{StaticResource GhostStyle}" Click="OpenSettings_Click"
+                      Padding="9,4" ToolTip="设置">
+                <Button.Content>
+                  <Viewbox Width="15" Height="15" IsHitTestVisible="False">
+                    <Grid Width="24" Height="24">
+                      <Ellipse Width="14.4" Height="14.4"
+                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                               StrokeThickness="2.5" />
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="0" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="40" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="80" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="120" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="160" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="200" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="240" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="280" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
+                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <Rectangle.RenderTransform>
+                          <RotateTransform Angle="320" CenterX="12" CenterY="12" />
+                        </Rectangle.RenderTransform>
+                      </Rectangle>
+                    </Grid>
+                  </Viewbox>
+                </Button.Content>
+              </Button>
             </StackPanel>
           </Grid>
 
@@ -241,10 +313,11 @@
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
 
-              <!-- 搜索 + 清空 -->
+              <!-- 搜索 + Win+C 接管 + 清空 -->
               <Grid Grid.Row="0" Margin="14,0,14,8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
@@ -256,7 +329,11 @@
                              VerticalAlignment="Center" IsHitTestVisible="False" />
                 </Grid>
 
-                <Button Grid.Column="1" Style="{StaticResource GhostStyle}" Content="清空"
+                <!-- 只在剪贴板页显示：点了直接接管 Win+V（系统剪贴板历史那组键） -->
+                <Button Grid.Column="1" x:Name="BtnWinV" Style="{StaticResource GhostStyle}"
+                        Content="Win+V 已接管" Click="BtnWinV_Click" Margin="6,0,0,0" Height="34"
+                        FontSize="12" Padding="9,4" />
+                <Button Grid.Column="2" Style="{StaticResource GhostStyle}" Content="清空"
                         Click="ClipClear_Click" Margin="6,0,0,0" Height="34" />
               </Grid>
 
@@ -380,6 +457,15 @@
               <TextBlock x:Name="ClipEmpty" Grid.Row="2" Text="还没有复制记录" FontSize="12"
                          Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center"
                          VerticalAlignment="Center" IsHitTestVisible="False" />
+
+              <!-- 剪贴板页自己的瞬时提示（FlashHint 会同时写这里和速览页的提示条） -->
+              <Border Grid.Row="2" x:Name="ClipHintBox" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                      Margin="0,0,0,14" Padding="12,7" CornerRadius="9" Visibility="Collapsed"
+                      Background="{DynamicResource CardHoverBrush}"
+                      BorderThickness="1" BorderBrush="{DynamicResource StrokeBrush}">
+                <TextBlock x:Name="ClipHint" FontSize="12" Foreground="{DynamicResource FgBrush}"
+                           TextTrimming="CharacterEllipsis" MaxWidth="560" />
+              </Border>
             </Grid>
 
             <!-- ===== 页3：待办 ===== -->
@@ -519,8 +605,14 @@
                              Foreground="{DynamicResource FgMuteBrush}" Margin="12,0,0,0"
                              VerticalAlignment="Center" IsHitTestVisible="False" />
                 </Grid>
-                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              CanContentScroll="True">
                   <ItemsControl x:Name="PickerList">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel VirtualizationMode="Recycling" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
                         <Button Tag="{Binding}" Click="PickerItem_Click" HorizontalContentAlignment="Stretch"
@@ -567,6 +659,10 @@
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
                 </ScrollViewer>
+                <!-- 扫描期间的占位提示：扫描在后台线程跑，这一帧 UI 不卡 -->
+                <TextBlock x:Name="PickerLoading" Grid.Row="2" Text="正在扫描已安装应用…" FontSize="12.5"
+                           Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed" />
               </Grid>
             </Border>
 
@@ -580,10 +676,17 @@
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" Margin="0,0,0,10">
-                  <TextBlock Text="设置" FontSize="13.5" FontWeight="SemiBold"
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <TextBlock Grid.Row="0" Text="设置" FontSize="13.5" FontWeight="SemiBold"
                              Foreground="{DynamicResource FgBrush}" VerticalAlignment="Center" />
-                  <Button Style="{StaticResource GhostStyle}" Content="关闭" HorizontalAlignment="Right"
+                  <Button Grid.Row="0" Style="{StaticResource GhostStyle}" Content="关闭" HorizontalAlignment="Right"
                           Click="CloseSettings_Click" />
+                  <TextBlock Grid.Row="1" x:Name="SettingsHint" FontSize="11.5" Margin="1,6,0,0"
+                             Foreground="{DynamicResource SuccessBrush}" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
                 </Grid>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -594,7 +697,7 @@
                       <StackPanel>
                         <TextBlock Text="剪贴板快捷键" FontSize="12.5" FontWeight="SemiBold"
                                    Foreground="{DynamicResource FgBrush}" />
-                        <TextBlock Text="在任意程序里按这组键，直接呼出剪贴板面板。默认接管系统自带的 Win+V。"
+                        <TextBlock Text="在任意程序里按这组键，直接呼出剪贴板面板。默认接管系统剪贴板历史的 Win+V。"
                                    FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}"
                                    TextWrapping="Wrap" Margin="0,4,0,11" />
 
@@ -641,7 +744,54 @@
                                    Foreground="{DynamicResource FgBrush}" />
                         <TextBlock FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}"
                                    TextWrapping="Wrap" LineHeight="18" Margin="0,5,0,0"
-                                   Text="Windows 自带的「剪贴板历史」也用 Win+V。这里用 RegisterHotKey 把这组键注册过来，系统那套面板就不会再弹出来。若状态栏显示「被占用」，说明有别的软件抢先注册了，换一组键即可。" />
+                                   Text="Windows 自带的「剪贴板历史」也用 Win+V。这里用 RegisterHotKey 把这组键注册过来，系统那套面板就不会再弹出来。若状态栏显示「被占用」，说明有别的软件抢先注册了（或在系统设置里打开了剪贴板历史），换一组键即可。" />
+                      </StackPanel>
+                    </Border>
+
+                    <!-- 外观 -->
+                    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Padding="14,12" Margin="0,10,0,0">
+                      <StackPanel>
+                        <TextBlock Text="外观" FontSize="12.5" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource FgBrush}" />
+                        <TextBlock Text="三套主题，切换后立即生效；托盘右键菜单里也能切。"
+                                   FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}"
+                                   TextWrapping="Wrap" Margin="0,4,0,10" />
+                        <StackPanel Orientation="Horizontal">
+                          <Button x:Name="BtnThemeBlack" Style="{StaticResource PillStyle}" Content="黑色"
+                                  Tag="black" Click="SettingsTheme_Click" Margin="0,0,3,0" FontSize="12" Padding="11,6" />
+                          <Button x:Name="BtnThemeWhite" Style="{StaticResource PillStyle}" Content="白色"
+                                  Tag="white" Click="SettingsTheme_Click" Margin="0,0,3,0" FontSize="12" Padding="11,6" />
+                          <Button x:Name="BtnThemeGlass" Style="{StaticResource PillStyle}" Content="液态玻璃"
+                                  Tag="glass" Click="SettingsTheme_Click" FontSize="12" Padding="11,6" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+
+                    <!-- 通用 -->
+                    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Padding="14,12" Margin="0,10,0,0">
+                      <StackPanel>
+                        <TextBlock Text="通用" FontSize="12.5" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource FgBrush}" />
+                        <Grid Margin="0,10,0,0">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <CheckBox x:Name="ChkAutoStart" Grid.Column="0" Style="{StaticResource DarkCheck}"
+                                    VerticalAlignment="Center" Click="AutoStart_Click" />
+                          <TextBlock Grid.Column="1" Text="开机自动启动" FontSize="12" Margin="8,0,0,0" Cursor="Hand"
+                                     Foreground="{DynamicResource FgDimBrush}" VerticalAlignment="Center"
+                                     MouseLeftButtonUp="AutoStartLabel_Click" />
+                          <Button Grid.Column="2" Style="{StaticResource GhostStyle}" Content="重新扫描已安装应用"
+                                  Click="RescanApps_Click" FontSize="11.5" Padding="9,4" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                          <Button Style="{StaticResource GhostStyle}" Content="打开数据目录" Click="OpenDataDir_Click"
+                                  FontSize="11.5" Padding="9,4" Margin="0,0,3,0" />
+                          <Button Style="{StaticResource DangerGhostStyle}" Content="退出 NotchDock"
+                                  Click="QuitApp_Click" FontSize="11.5" Padding="9,4" />
+                        </StackPanel>
                       </StackPanel>
                     </Border>
 

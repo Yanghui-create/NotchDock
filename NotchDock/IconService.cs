@@ -9,14 +9,16 @@ namespace NotchDock;
 public static class IconService
 {
     private static readonly Dictionary<string, ImageSource?> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object Gate = new();
 
     public static ImageSource? Get(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
-        var key = path;
-        if (Cache.TryGetValue(key, out var cached)) return cached;
+
+        lock (Gate) { if (Cache.TryGetValue(path, out var cached)) return cached; }
 
         ImageSource? result = null;
+        var ok = false;
         var info = new Native.SHFILEINFO();
         uint flags = Native.SHGFI_ICON | Native.SHGFI_LARGEICON;
         uint attrs = 0;
@@ -35,12 +37,31 @@ public static class IconService
                 result = src;
                 Native.DestroyIcon(info.hIcon);
             }
+            ok = true;
         }
         catch (Exception ex) { Log.Ex("取图标失败: " + path, ex); }
 
-        Cache[key] = result;
+        // 失败不写缓存，留给 UI 线程上懒加载再试一次
+        if (ok) lock (Gate) { Cache[path] = result; }
         return result;
     }
 
-    public static void Invalidate(string path) => Cache.Remove(path);
+    /// <summary>
+    /// 后台预热：提前把一批路径的图标取好缓存起来。
+    /// SHGetFileInfo + CreateBitmapSourceFromHIcon 都是可冻结的自由线程对象，
+    /// 放在后台线程跑不会碰 UI；万一哪个路径失败，只是不进缓存，不影响使用。
+    /// </summary>
+    public static void Prewarm(IEnumerable<string> paths)
+    {
+        foreach (var p in paths)
+        {
+            if (string.IsNullOrWhiteSpace(p)) continue;
+            try { Get(p); } catch { }
+        }
+    }
+
+    public static void Invalidate(string path)
+    {
+        lock (Gate) { Cache.Remove(path); }
+    }
 }

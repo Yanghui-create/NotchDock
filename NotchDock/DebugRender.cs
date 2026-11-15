@@ -44,12 +44,18 @@ public partial class NotchWindow
         SavePng(Path.Combine(dir, "3-todos.png"));
 
         PickerOverlay.Visibility = Visibility.Visible;
+        // 离屏渲染要把虚拟化关掉，否则只画得出可见区域那几项，预览图看不出列表全貌
+        var wasVirtual = VirtualizingStackPanel.GetIsVirtualizing(PickerList);
+        VirtualizingStackPanel.SetIsVirtualizing(PickerList, false);
         ShowPicker(null);
         UpdateLayout();
         SavePng(Path.Combine(dir, "4-apppicker.png"));
+        VirtualizingStackPanel.SetIsVirtualizing(PickerList, wasVirtual);
 
         PickerOverlay.Visibility = Visibility.Collapsed;
         SettingsOverlay.Visibility = Visibility.Visible;
+        ChkAutoStart.IsChecked = AutoStart.IsEnabled();
+        RefreshSettingsThemeVisual();
         RefreshHotKeyUi();
         UpdateLayout();
         SavePng(Path.Combine(dir, "5-settings.png"));

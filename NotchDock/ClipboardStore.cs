@@ -1,8 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace NotchDock;
 
@@ -12,8 +10,6 @@ public enum ClipKind { Text, Image, File, Url, Code }
 public sealed class ClipItem : ObservableObject
 {
     private bool _pinned;
-    private string? _cachedImagePath;
-    private BitmapSource? _image;
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public ClipKind Kind { get; set; } = ClipKind.Text;
@@ -21,6 +17,14 @@ public sealed class ClipItem : ObservableObject
 
     /// <summary>图片文件名（相对 clips 目录），文本类为 null</summary>
     public string? ImageFile { get; set; }
+
+    /// <summary>
+    /// 图片像素宽高，复制入库时一并记下。
+    /// 之前是列表绑定时才去读文件解码拿尺寸——几百张卡同时绑定就等于在 UI 线程上
+    /// 串行解码几百个 PNG，正是展开剪贴板页掉帧的元凶之一。
+    /// </summary>
+    public int ImageW { get; set; }
+    public int ImageH { get; set; }
 
     public List<string> Files { get; set; } = new();
 
@@ -85,75 +89,9 @@ public sealed class ClipItem : ObservableObject
 
     [JsonIgnore] public bool ShowText => !IsImage;
 
-    /// <summary>图片卡片上显示的尺寸文字</summary>
+    /// <summary>图片卡片上显示的尺寸文字（用入库时记录的宽高，不解码文件）</summary>
     [JsonIgnore]
-    public string ImageSizeText
-    {
-        get
-        {
-            var src = Image;
-            return src == null ? "图片" : $"{src.PixelWidth} × {src.PixelHeight}";
-        }
-    }
-
-    /// <summary>用 ImageBrush 而不是 Image 控件——分层窗口里 Image 控件偶发不绘制</summary>
-    [JsonIgnore]
-    public ImageBrush? ImageBrush
-    {
-        get
-        {
-            var src = Image;
-            if (src == null) return null;
-            var brush = new ImageBrush(src)
-            {
-                Stretch = Stretch.UniformToFill,
-                AlignmentX = AlignmentX.Left,
-                AlignmentY = AlignmentY.Top
-            };
-            brush.Freeze();
-            return brush;
-        }
-    }
-
-    [JsonIgnore]
-    public BitmapSource? Image
-    {
-        get
-        {
-            if (!IsImage) return null;
-            if (_image != null && _cachedImagePath == ImageFile) return _image;
-
-            try
-            {
-                var path = ClipStore.ImagePathOf(ImageFile!);
-                if (!File.Exists(path))
-                {
-                    Log.Write($"clip: 图片文件不存在 {path}");
-                    return null;
-                }
-
-                // 用 BitmapFrame 直接拿到"已完全解码"的一帧。
-                // BitmapImage + StreamSource 这条路过 Freeze 之后在分层窗口里画不出来。
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                var frame = BitmapFrame.Create(fs, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-
-                // 再包一层 CachedBitmap：分层窗口只会真正绘制"已缓存"的位图，
-                // 直接拿 BitmapFrame 会得到一块空白的矩形。
-                var cached = new CachedBitmap(frame, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-                cached.Freeze();
-
-                _image = cached;
-                _cachedImagePath = ImageFile;
-                Log.Write($"clip: 图片加载成功 {cached.PixelWidth}x{cached.PixelHeight} {ImageFile}");
-                return _image;
-            }
-            catch (Exception ex)
-            {
-                Log.Write($"clip: 图片加载失败 {ImageFile} -> {ex.GetType().Name} {ex.Message}");
-                return null;
-            }
-        }
-    }
+    public string ImageSizeText => IsImage && ImageW > 0 ? $"{ImageW} × {ImageH}" : "图片";
 
     [JsonIgnore]
     public string TimeText
@@ -173,12 +111,15 @@ public sealed class ClipItem : ObservableObject
 }
 
 /// <summary>
-/// 剪贴板历史的存储：JSON 索引 + 图片单独落盘，最多 500 条。
-/// 超出时优先淘汰最旧的「未固定」条目。
+/// 剪贴板历史的存储：JSON 索引 + 图片单独落盘，最多 50 条。
+/// 超出时优先淘汰最旧的「未固定」条目（固定项不占名额，也不会被挤掉）。
+///
+/// 持久化保证：每次增删改都立即落盘，写法是「临时文件 + File.Replace 原子替换」，
+/// 旧索引自动转成 .bak；万一主索引损坏，启动时回退读 .bak。重启不会丢记录。
 /// </summary>
 public static class ClipStore
 {
-    public const int MaxItems = 500;
+    public const int MaxItems = 50;
 
     public static readonly ObservableCollection<ClipItem> Items = new();
 
@@ -195,19 +136,37 @@ public static class ClipStore
 
     public static void Load()
     {
+        Items.Clear();
+
+        var list = ReadIndex(IndexPath);
+        if (list == null && File.Exists(IndexPath + ".bak"))
+        {
+            list = ReadIndex(IndexPath + ".bak");
+            if (list != null) Log.Write("clip: 主索引不可读，已从 .bak 恢复");
+        }
+
+        if (list == null)
+        {
+            if (File.Exists(IndexPath)) Log.Write("clip: 索引不可读，本次历史为空");
+            return;
+        }
+
+        foreach (var it in list.OrderByDescending(x => x.Time)) Items.Add(it);
+        Log.Write($"clip: 载入 {Items.Count} 条历史");
+    }
+
+    private static List<ClipItem>? ReadIndex(string path)
+    {
         try
         {
-            Items.Clear();
-            if (!File.Exists(IndexPath)) return;
-
-            var json = File.ReadAllText(IndexPath);
-            var list = JsonSerializer.Deserialize<List<ClipItem>>(json, Json);
-            if (list == null) return;
-
-            foreach (var it in list.OrderByDescending(x => x.Time)) Items.Add(it);
-            Log.Write($"clip: 载入 {Items.Count} 条历史");
+            if (!File.Exists(path)) return null;
+            return JsonSerializer.Deserialize<List<ClipItem>>(File.ReadAllText(path), Json);
         }
-        catch (Exception ex) { Log.Ex("剪贴板历史载入失败", ex); }
+        catch (Exception ex)
+        {
+            Log.Ex($"读取剪贴板索引失败（{Path.GetFileName(path)}）", ex);
+            return null;
+        }
     }
 
     public static void Save()
@@ -217,12 +176,12 @@ public static class ClipStore
             Directory.CreateDirectory(Store.Dir);
             var json = JsonSerializer.Serialize(Items.ToList(), Json);
 
-            // 先写临时文件再替换，避免写一半崩溃把历史弄坏
+            // 先写临时文件，再原子替换：写一半进程被杀也不会把历史弄坏
             var tmp = IndexPath + ".tmp";
+            var bak = IndexPath + ".bak";
             File.WriteAllText(tmp, json);
-            File.Copy(tmp, IndexPath, true);
-            File.Delete(tmp);
-            Log.Write($"clip: 写入 {Items.Count} 条");
+            if (File.Exists(IndexPath)) File.Replace(tmp, IndexPath, bak);
+            else File.Move(tmp, IndexPath);
         }
         catch (Exception ex) { Log.Ex("剪贴板历史保存失败", ex); }
     }

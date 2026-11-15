@@ -121,7 +121,7 @@ public sealed class ClipboardWatcher : IDisposable
                 var img = Clipboard.GetImage();
                 if (img == null) return;
 
-                var bytes = EncodePng(img);
+                var (bytes, w, h) = EncodePng(img);
                 var sig = "I|" + Hash(Convert.ToBase64String(bytes));
                 if (sig == _lastSig) return;
                 _lastSig = sig;
@@ -131,6 +131,9 @@ public sealed class ClipboardWatcher : IDisposable
                 {
                     Kind = ClipKind.Image,
                     ImageFile = file,
+                    // 尺寸在入库时记下来，列表里直接显示，不用再解码文件
+                    ImageW = w,
+                    ImageH = h,
                     Source = source,
                     Time = DateTime.Now
                 });
@@ -186,8 +189,9 @@ public sealed class ClipboardWatcher : IDisposable
         catch { return "未知"; }
     }
 
-    /// <summary>把剪贴板图片编码成 PNG；超大图先等比缩到 1600px 以内，避免存出几十兆</summary>
-    private static byte[] EncodePng(BitmapSource src)
+    /// <summary>把剪贴板图片编码成 PNG；超大图先等比缩到 1600px 以内，避免存出几十兆。
+    /// 同时返回实际存盘的像素尺寸（可能被缩放过），供卡片直接显示。</summary>
+    private static (byte[] bytes, int w, int h) EncodePng(BitmapSource src)
     {
         var width = src.PixelWidth;
         var height = src.PixelHeight;
@@ -204,7 +208,7 @@ public sealed class ClipboardWatcher : IDisposable
         enc.Frames.Add(BitmapFrame.Create(target));
         using var ms = new MemoryStream();
         enc.Save(ms);
-        return ms.ToArray();
+        return (ms.ToArray(), target.PixelWidth, target.PixelHeight);
     }
 
     /// <summary>粗分类：URL / 代码 / 普通文字</summary>

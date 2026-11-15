@@ -49,6 +49,15 @@ public partial class NotchWindow : Window
     private int _animToken;
     private long _expandTick;
 
+    /// <summary>
+    /// 剪贴板列表是否需要重建。展开/切到剪贴板页时，没有新内容就原样显示——
+    /// 之前每次展开都无条件 RebuildClips()，几百条记录会整表重建并实例化几百张卡片，
+    /// 正好卡在展开动画那一帧上（这就是「停在剪贴板页，再展开掉帧」的主因）。
+    /// </summary>
+    private bool _clipsDirty;
+    private DispatcherTimer? _pickerDebounce;
+    private DispatcherTimer? _hintTimer;
+
     // 窗口尺寸动画状态
     private double _winW = CollapsedWidth;
     private double _winH = CollapsedHeight;
@@ -71,6 +80,10 @@ public partial class NotchWindow : Window
         ClipList.ItemsSource = _clipItems;
         PickerList.ItemsSource = _pickerItems;
 
+        // 应用库搜索防抖（只订阅一次）
+        _pickerDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
+        _pickerDebounce.Tick += PickerDebounce_Tick;
+
         Loaded += OnLoaded;
         SourceInitialized += OnSourceInitialized;
     }
@@ -92,6 +105,24 @@ public partial class NotchWindow : Window
         SetTab(0);
         Theme.Apply(Store.Config.Theme);
         SyncGlassLayer();
+
+        // 收藏图标在后台预热：SHGetFileInfo 逐个取图标是磁盘+COM 调用，
+        // 放在 UI 线程会让首帧布局变卡（速览页和应用库都受益）。
+        var favPaths = Store.Config.Favorites.Select(f => f.Target).ToList();
+        _ = Task.Run(() => IconService.Prewarm(favPaths));
+
+        // 应用库同样在后台预热（启动 3 秒后，避开开机竞争）：
+        // 等用户点「＋ 应用」时，索引和图标一般都已经就绪，浮层秒出。
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000);
+            try
+            {
+                var apps = await ScanAppsAsync();
+                await WarmIconsAsync(apps);
+            }
+            catch (Exception ex) { Log.Ex("应用库预热失败", ex); }
+        });
 
         // 定时器必须先建好，再挂鼠标事件
         _guard = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(60) };
@@ -291,7 +322,12 @@ public partial class NotchWindow : Window
         AnimateContentShift(0, 300, 30);
         AnimateCollapsedDots(0, 110, 0);
 
-        if (_tab == 1) RebuildClips();
+        if (_tab == 1 && _clipsDirty)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            RebuildClips();
+            Log.Write($"clip: 展开时重建 {_clipItems.Count} 条，耗时 {sw.ElapsedMilliseconds}ms");
+        }
         RefreshTabVisual();
     }
 
@@ -583,6 +619,8 @@ public partial class NotchWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        // 兜底落盘：每条增删都已经即时保存过，这里再写一次，确保异常退出也不丢历史
+        try { ClipStore.Save(); } catch { }
         UninstallMouseHook();
         _clipWatcher.Dispose();
         _focus.Dispose();
@@ -673,7 +711,7 @@ public partial class NotchWindow : Window
         }
         else if (_hotKey.IsRegistered)
         {
-            HotKeyStatus.Text = hk.Equals(HotKey.Default) ? "已生效 · 已接管系统 Win+V" : "已生效";
+            HotKeyStatus.Text = hk.Equals(HotKey.WinV) ? "已生效 · 已接管 Win+V" : "已生效";
             HotKeyStatus.Foreground = (Brush)FindResource("SuccessBrush");
         }
         else
@@ -681,6 +719,39 @@ public partial class NotchWindow : Window
             HotKeyStatus.Text = "注册失败，可能被其它程序占用";
             HotKeyStatus.Foreground = (Brush)FindResource("DangerBrush");
         }
+
+        RefreshWinVButton();
+    }
+
+    /// <summary>
+    /// 剪贴板页右上角那个「Win+V 接管」按钮的状态：
+    /// 当前热键正是 Win+V 且注册成功 → 绿色「Win+V 已接管」；否则是中性色的「接管 Win+V」。
+    /// </summary>
+    private void RefreshWinVButton()
+    {
+        if (BtnWinV == null) return;
+
+        var on = Store.Config.HotKeyEnabled && _hotKey.IsRegistered && _hotKey.Current.Equals(HotKey.WinV);
+        BtnWinV.Content = on ? "Win+V 已接管" : "接管 Win+V";
+        BtnWinV.Foreground = on ? (Brush)FindResource("SuccessBrush") : (Brush)FindResource("FgDimBrush");
+        BtnWinV.ToolTip = on
+            ? "Win+V 已由 NotchDock 接管，按下即呼出剪贴板"
+            : "点击接管 Win+V（系统剪贴板历史那组键）";
+    }
+
+    /// <summary>点了「接管 Win+V」：直接把这组键注册过来，不用进设置里改</summary>
+    private void BtnWinV_Click(object sender, RoutedEventArgs e)
+    {
+        if (Store.Config.HotKeyEnabled && _hotKey.IsRegistered && _hotKey.Current.Equals(HotKey.WinV))
+        {
+            FlashHint("Win+V 已经在接管中");
+            return;
+        }
+
+        if (TrySaveHotKey(HotKey.WinV))
+            FlashHint("已接管 Win+V，按下即可呼出剪贴板");
+        else
+            FlashHint("Win+V 被占用了，换个快捷键试试");
     }
 
     public void ShowSettings()
@@ -688,6 +759,8 @@ public partial class NotchWindow : Window
         if (!_expanded) Expand(true, "settings");
         PickerOverlay.Visibility = Visibility.Collapsed;
         SettingsOverlay.Visibility = Visibility.Visible;
+        ChkAutoStart.IsChecked = AutoStart.IsEnabled();
+        RefreshSettingsThemeVisual();
         RefreshHotKeyUi();
     }
 
@@ -699,6 +772,76 @@ public partial class NotchWindow : Window
     {
         _hotKey.EndCapture(null);
         SettingsOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    // ===================== 设置面板：外观 / 通用 =====================
+
+    private void SettingsTheme_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button b && b.Tag is string kind)
+        {
+            ApplyTheme(kind);
+            RefreshSettingsThemeVisual();
+        }
+    }
+
+    private void RefreshSettingsThemeVisual()
+    {
+        var pills = new[] { BtnThemeBlack, BtnThemeWhite, BtnThemeGlass };
+        if (pills.Any(p => p == null)) return;
+
+        var selBg = (Brush)FindResource("SelFillBrush");
+        var selFg = (Brush)FindResource("SelFgBrush");
+        var idleFg = (Brush)FindResource("FgDimBrush");
+        var current = Theme.Normalize(Store.Config.Theme);
+
+        foreach (var p in pills)
+        {
+            var on = Theme.Normalize(p.Tag?.ToString()) == current;
+            p.Background = on ? selBg : Brushes.Transparent;
+            p.Foreground = on ? selFg : idleFg;
+            p.FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
+        }
+    }
+
+    private void AutoStart_Click(object sender, RoutedEventArgs e)
+        => SetAutoStart(ChkAutoStart.IsChecked == true);
+
+    private void AutoStartLabel_Click(object sender, MouseButtonEventArgs e)
+    {
+        ChkAutoStart.IsChecked = !(ChkAutoStart.IsChecked == true);
+        SetAutoStart(ChkAutoStart.IsChecked == true);
+    }
+
+    private void RescanApps_Click(object sender, RoutedEventArgs e)
+    {
+        AppIndexer.ClearCache();
+        ReloadApps();
+        FlashSettingsHint("已重新扫描已安装应用");
+    }
+
+    private void OpenDataDir_Click(object sender, RoutedEventArgs e)
+    {
+        Launcher.OpenPath(Store.Dir, true);
+        FlashSettingsHint("已打开数据目录");
+    }
+
+    private void QuitApp_Click(object sender, RoutedEventArgs e) => (Application.Current as App)?.ExitApp();
+
+    /// <summary>设置面板顶部的一行瞬时反馈（自动消失）</summary>
+    private void FlashSettingsHint(string text)
+    {
+        if (SettingsHint == null) return;
+        SettingsHint.Text = text;
+        SettingsHint.Visibility = Visibility.Visible;
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            SettingsHint.Visibility = Visibility.Collapsed;
+        };
+        timer.Start();
     }
 
     private async void RecordHotKey_Click(object sender, RoutedEventArgs e)
@@ -729,7 +872,7 @@ public partial class NotchWindow : Window
     private void ResetHotKey_Click(object sender, RoutedEventArgs e)
     {
         if (TrySaveHotKey(HotKey.Default))
-            FlashHint("快捷键已恢复为 Win + V");
+            FlashHint($"快捷键已恢复为 {HotKey.Default.Pretty}");
     }
 
     private bool TrySaveHotKey(HotKey hk)
@@ -779,7 +922,7 @@ public partial class NotchWindow : Window
         BtnAction.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         BtnAction.Content = "清除已完成";
 
-        if (index == 1) RebuildClips();
+        if (index == 1 && _clipsDirty) RebuildClips();
         RefreshTabVisual();
     }
 
@@ -918,27 +1061,119 @@ public partial class NotchWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 瞬时提示。速览页有自己的提示条，剪贴板页也放了一条——
+    /// 以前 FlashHint 只写 FavHint，在剪贴板页点「清空 / 固定」时用户根本看不到反馈。
+    /// </summary>
     private void FlashHint(string text)
     {
-        FavHint.Text = text;
+        if (FavHint != null) FavHint.Text = text;
+
+        if (ClipHint != null && ClipHintBox != null)
+        {
+            ClipHint.Text = text;
+            ClipHintBox.Visibility = Visibility.Visible;
+
+            _hintTimer?.Stop();
+            _hintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
+            _hintTimer.Tick += (_, _) =>
+            {
+                _hintTimer.Stop();
+                ClipHintBox.Visibility = Visibility.Collapsed;
+            };
+            _hintTimer.Start();
+        }
+
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
-            FavHint.Text = "把文件、文件夹或 exe 直接拖到刘海里即可收藏";
+            if (FavHint != null) FavHint.Text = "把文件、文件夹或 exe 直接拖到刘海里即可收藏";
         };
         timer.Start();
     }
 
     // ===================== 应用库 =====================
 
+    private Task<List<FavoriteItem>>? _appScanTask;
+    private Task? _iconWarmTask;
+
+    /// <summary>后台扫描开始菜单（实测 93 个应用约 40ms）。重复调用返回同一个任务。</summary>
+    private Task<List<FavoriteItem>> ScanAppsAsync()
+    {
+        _appScanTask ??= Task.Run(() =>
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var apps = AppIndexer.GetInstalledApps();
+            Log.Write($"picker: 扫描 {apps.Count} 个应用，耗时 {sw.ElapsedMilliseconds}ms（后台线程）");
+            return apps;
+        });
+        return _appScanTask;
+    }
+
+    /// <summary>
+    /// 后台预热图标。SHGetFileInfo 每个要约 30ms，93 个就是 3 秒多——
+    /// 这是以前点「＋ 应用」卡顿的真正大头，绝不能放在 UI 线程上。
+    /// </summary>
+    private Task WarmIconsAsync(List<FavoriteItem> apps)
+    {
+        _iconWarmTask ??= Task.Run(() =>
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            IconService.Prewarm(apps.Select(a => a.Target));
+            Log.Write($"picker: 图标预热 {apps.Count} 个，耗时 {sw.ElapsedMilliseconds}ms（后台线程）");
+        });
+        return _iconWarmTask;
+    }
+
+    /// <summary>等后台索引完成后填充列表；中途关掉浮层就不填了</summary>
+    private async Task WarmAndShowPickerAsync()
+    {
+        List<FavoriteItem> apps;
+        try
+        {
+            apps = await ScanAppsAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Ex("扫描已安装应用失败", ex);
+            PickerLoading.Text = "扫描失败，请重试";
+            return;
+        }
+
+        // 列表先出来（扫描只要几十毫秒），可见项的图标按需懒加载
+        if (PickerOverlay.Visibility == Visibility.Visible)
+        {
+            ShowPicker(PickerSearch.Text);
+            PickerLoading.Visibility = Visibility.Collapsed;
+        }
+
+        try
+        {
+            await WarmIconsAsync(apps);
+
+            // 图标缓存就绪后刷新一次：容器重建时全部命中缓存，不会再一个个闪
+            if (PickerOverlay.Visibility == Visibility.Visible)
+                ShowPicker(PickerSearch.Text);
+        }
+        catch (Exception ex) { Log.Ex("图标预热失败", ex); }
+    }
+
+    /// <summary>
+    /// 「＋ 应用」：点开的这一帧只做"显示浮层 + 出占位提示"，
+    /// 索引和图标预热全部在后台线程跑，UI 全程不卡。
+    /// </summary>
     private void OpenPicker_Click(object sender, RoutedEventArgs e)
     {
         PickerOverlay.Visibility = Visibility.Visible;
         PickerSearch.Text = "";
         PickerHint.Visibility = Visibility.Visible;
-        ShowPicker(null);
+        PickerLoading.Text = "正在扫描已安装应用…";
+        PickerLoading.Visibility = Visibility.Visible;
+        _pickerItems.Clear();
         PickerSearch.Focus();
+
+        _ = WarmAndShowPickerAsync();
     }
 
     private void ClosePicker_Click(object sender, RoutedEventArgs e) => ClosePicker();
@@ -946,11 +1181,30 @@ public partial class NotchWindow : Window
     private void ClosePicker()
     {
         PickerOverlay.Visibility = Visibility.Collapsed;
+        PickerLoading.Visibility = Visibility.Collapsed;
         PickerSearch.Text = "";
     }
 
+    /// <summary>搜索框防抖：连续敲键盘时每 140ms 才过滤一次，别每个字符都重建列表</summary>
     private void PickerSearch_TextChanged(object sender, TextChangedEventArgs e)
-        => ShowPicker(PickerSearch.Text);
+    {
+        PickerHint.Visibility = string.IsNullOrEmpty(PickerSearch.Text)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (_pickerDebounce == null) return;
+        _pickerDebounce.Stop();
+        _pickerDebounce.Start();
+    }
+
+    private void PickerDebounce_Tick(object? sender, EventArgs e)
+    {
+        _pickerDebounce?.Stop();
+        if (PickerOverlay.Visibility != Visibility.Visible) return;
+        // 后台扫描还没跑完就先别筛——好了之后会按当前关键词统一刷新
+        if (_appScanTask is { IsCompleted: false }) return;
+        ShowPicker(PickerSearch.Text);
+    }
 
     private void ShowPicker(string? filter)
     {
@@ -987,8 +1241,17 @@ public partial class NotchWindow : Window
     public void ReloadApps()
     {
         AppIndexer.ClearCache();
-        if (PickerOverlay.Visibility == Visibility.Visible) ShowPicker(PickerSearch.Text);
+        _appScanTask = null;        // 索引作废，下次打开重新扫
+        _iconWarmTask = null;
         FlashHint("应用列表已重新扫描");
+
+        if (PickerOverlay.Visibility == Visibility.Visible)
+        {
+            PickerLoading.Text = "正在重新扫描…";
+            PickerLoading.Visibility = Visibility.Visible;
+            _pickerItems.Clear();
+            _ = WarmAndShowPickerAsync();
+        }
     }
 
     // ===================== 剪贴板历史 =====================
@@ -996,8 +1259,16 @@ public partial class NotchWindow : Window
     private void OnClipCaptured(ClipItem item)
     {
         ClipStore.Add(item);
+        _clipsDirty = true;
         RefreshTabVisual();
-        if (_tab == 1) RebuildClips();
+        if (_tab == 1)
+        {
+            // 收起状态下也顺手重建：这时没有动画在跑，成本落在后台，
+            // 等用户展开时列表已经是新的（展开那一帧零成本）。
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            RebuildClips();
+            Log.Write($"clip: 后台重建 {_clipItems.Count} 条，耗时 {sw.ElapsedMilliseconds}ms");
+        }
     }
 
     /// <summary>按当前搜索词 + 分类重建列表</summary>
@@ -1013,6 +1284,7 @@ public partial class NotchWindow : Window
             _clipItems.Add(it);
         }
 
+        _clipsDirty = false;
         ClipEmpty.Visibility = _clipItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ClipEmpty.Text = ClipStore.Items.Count == 0
             ? "还没有复制记录，复制点什么试试"
@@ -1184,7 +1456,7 @@ public partial class NotchWindow : Window
     {
         if (sender is not Button b || b.Tag is not ClipItem it) return;
         ClipStore.TogglePin(it);
-        FlashHint(it.Pinned ? "已固定，不会被 500 条上限挤掉" : "已取消固定");
+        FlashHint(it.Pinned ? "已固定，不会被 50 条上限挤掉" : "已取消固定");
     }
 
     private void ClipDelete_Click(object sender, RoutedEventArgs e)
@@ -1366,22 +1638,8 @@ public partial class NotchWindow : Window
     }
 
     // ===================== 菜单 =====================
-
-    private void BtnMenu_Click(object sender, RoutedEventArgs e)
-    {
-        // 和托盘右键菜单是同一份定义（AppMenu.Build），只是换了个渲染器，
-        // 所以「外观」这类项不会一边有一边没有。
-        var app = Application.Current as App;
-        if (app == null) return;
-
-        var menu = AppMenu.RenderWpf(AppMenu.Build(app));
-        menu.PlacementTarget = BtnMenu;
-        menu.Placement = PlacementMode.Bottom;
-
-        _menuOpen = true;
-        menu.Closed += (_, _) => _menuOpen = false;
-        menu.IsOpen = true;
-    }
+    // （刘海里的「⋯」入口已移除：设置统一走右上角齿轮，功能都收在设置面板里；
+    //   托盘右键菜单仍由 AppMenu.Build 这一份定义渲染，内容与设置面板保持一致。）
 
     /// <summary>供菜单模型调用：切换开机自启并给出提示</summary>
     public void SetAutoStart(bool on)
@@ -1391,7 +1649,7 @@ public partial class NotchWindow : Window
     }
 
     public void NotifyAutoStartChanged(bool enabled)
-        => FlashFooter(enabled ? "已设置为开机自动启动" : "已取消开机自动启动");
+        => FlashHint(enabled ? "已设置为开机自动启动" : "已取消开机自动启动");
 
     public void FlashFooterPublic(string text) => FlashFooter(text);
 }

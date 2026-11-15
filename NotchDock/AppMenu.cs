@@ -9,9 +9,11 @@ public enum MenuNodeKind { Item, Separator }
 /// <summary>
 /// 菜单的声明式模型。
 ///
-/// 之前托盘菜单（WinForms ContextMenuStrip）和刘海里的「⋯」菜单（WPF ContextMenu）
+/// 早期托盘菜单（WinForms ContextMenuStrip）和刘海里的「⋯」菜单（WPF ContextMenu）
 /// 是两段各写一遍的代码，结果托盘里有「外观」，⋯ 里没有——两边慢慢就漂移了。
-/// 现在只有一份定义，两个渲染器：任意一边加项，另一边自动跟上。
+/// 后来刘海里的「⋯」入口被取消（设置统一走右上角齿轮，功能收进设置面板），
+/// 托盘菜单仍由这一份定义渲染；设置面板里的「外观 / 开机自启 / 重新扫描 / 数据目录 / 退出」
+/// 与这里的项保持一致。
 /// </summary>
 public sealed class MenuNode
 {

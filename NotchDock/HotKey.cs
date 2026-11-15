@@ -27,7 +27,11 @@ public readonly struct HotKey : IEquatable<HotKey>
 
     public bool IsValid => Vk != 0 && Mods != HotKeyMods.None;
 
-    public static HotKey Default => new(HotKeyMods.Win, 0x56);   // Win + V
+    /// <summary>默认热键：Win+V。系统「剪贴板历史」那组键，启动即接管。</summary>
+    public static HotKey Default => WinV;
+
+    /// <summary>Win+V（0x56 = 'V'）。剪贴板页右上角那个「接管 Win+V」按钮用的就是它。</summary>
+    public static HotKey WinV => new(HotKeyMods.Win, 0x56);
 
     /// <summary>顺序固定为 Ctrl → Alt → Shift → Win，和界面显示一致</summary>
     public string Display
