@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Windows.Media.Imaging;
 
 namespace NotchDock;
 
@@ -10,6 +11,8 @@ public enum ClipKind { Text, Image, File, Url, Code }
 public sealed class ClipItem : ObservableObject
 {
     private bool _pinned;
+    private BitmapSource? _thumb;
+    private string? _thumbFile;
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public ClipKind Kind { get; set; } = ClipKind.Text;
@@ -93,6 +96,57 @@ public sealed class ClipItem : ObservableObject
     [JsonIgnore]
     public string ImageSizeText => IsImage && ImageW > 0 ? $"{ImageW} × {ImageH}" : "图片";
 
+    /// <summary>
+    /// 卡片上的缩略图。
+    ///
+    /// 早期结论「分层窗口画不出解码位图」其实冤枉了分层窗口——速览页收藏磁贴的
+    /// Image 控件（SHGetFileInfo 转出的冻结 BitmapSource）一直显示正常。当年失败的
+    /// 真凶是 BitmapImage 默认的**延迟解码**：layered window 的软件渲染路径拿到
+    /// 尚未解码完的位图就画成空白。这里改用当年成功的那套参数：
+    /// OnLoad 完全解码 + DecodePixelWidth 只解到缩略尺寸 + Freeze 冻结。
+    /// getter 线程安全（IsAsync 绑定和后台预热都会调它）。
+    /// </summary>
+    [JsonIgnore]
+    public BitmapSource? ThumbSource
+    {
+        get
+        {
+            if (!IsImage) return null;
+            var file = ImageFile!;
+
+            lock (ClipStore.ThumbGate)
+            {
+                if (_thumb != null && _thumbFile == file) return _thumb;
+            }
+
+            try
+            {
+                var path = ClipStore.ImagePathOf(file);
+                if (!File.Exists(path)) return null;
+
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.CacheOption = BitmapCacheOption.OnLoad;   // 必须：完全解码，不等渲染
+                bi.DecodePixelWidth = 260;                    // 只解码到缩略尺寸，又快又省内存
+                bi.UriSource = new Uri(path);
+                bi.EndInit();
+                bi.Freeze();
+
+                lock (ClipStore.ThumbGate)
+                {
+                    _thumb = bi;
+                    _thumbFile = file;
+                }
+                return bi;
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"clip: 缩略图解码失败 {file} -> {ex.GetType().Name} {ex.Message}");
+                return null;
+            }
+        }
+    }
+
     [JsonIgnore]
     public string TimeText
     {
@@ -120,6 +174,9 @@ public sealed class ClipItem : ObservableObject
 public static class ClipStore
 {
     public const int MaxItems = 50;
+
+    /// <summary>缩略图内存缓存的锁（getter 可能被 UI 线程、IsAsync 绑定线程、预热线程同时调用）</summary>
+    public static readonly object ThumbGate = new();
 
     public static readonly ObservableCollection<ClipItem> Items = new();
 

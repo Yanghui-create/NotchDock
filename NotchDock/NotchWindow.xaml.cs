@@ -111,6 +111,15 @@ public partial class NotchWindow : Window
         var favPaths = Store.Config.Favorites.Select(f => f.Target).ToList();
         _ = Task.Run(() => IconService.Prewarm(favPaths));
 
+        // 剪贴板缩略图后台预热：首开列表就能看到图，不用等 IsAsync 一张张解
+        _ = Task.Run(() =>
+        {
+            foreach (var it in ClipStore.Items.ToList())
+            {
+                try { _ = it.ThumbSource; } catch { }
+            }
+        });
+
         // 应用库同样在后台预热（启动 3 秒后，避开开机竞争）：
         // 等用户点「＋ 应用」时，索引和图标一般都已经就绪，浮层秒出。
         _ = Task.Run(async () =>
@@ -1269,6 +1278,11 @@ public partial class NotchWindow : Window
             RebuildClips();
             Log.Write($"clip: 后台重建 {_clipItems.Count} 条，耗时 {sw.ElapsedMilliseconds}ms");
         }
+
+        // 新图片的缩略图先在后台解好，展开时直接命中缓存
+        var captured = item;
+        if (captured.IsImage)
+            _ = Task.Run(() => { try { _ = captured.ThumbSource; } catch { } });
     }
 
     /// <summary>按当前搜索词 + 分类重建列表</summary>

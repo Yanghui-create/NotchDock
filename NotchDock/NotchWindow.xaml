@@ -427,24 +427,20 @@
                                      MaxHeight="62" TextTrimming="CharacterEllipsis"
                                      Visibility="{Binding ShowText, Converter={StaticResource BoolVis}}" />
 
-                          <!-- 图片预览 -->
-                          <!-- 缩略图：分层窗口里 Image 控件的解码结果画不出来，这里做成信息块，
-                               点击卡片仍可直接把原图复制回剪贴板 -->
-                          <Border Margin="0,7,0,0" Height="72" Width="218" CornerRadius="9"
-                                  HorizontalAlignment="Left" Background="{DynamicResource CardHoverBrush}"
+                          <!-- 图片缩略图：OnLoad 完全解码 + Freeze（与收藏磁贴同款可靠路径），
+                               IsAsync 让首次解码在后台线程跑，不卡列表；点卡片仍是粘贴原图 -->
+                          <Border Margin="0,7,0,0" HorizontalAlignment="Left" CornerRadius="9"
+                                  Padding="6" Background="{DynamicResource CardHoverBrush}"
                                   Visibility="{Binding HasImage, Converter={StaticResource BoolVis}}">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
-                                        VerticalAlignment="Center">
-                              <Border Width="28" Height="28" CornerRadius="7" Background="{Binding KindColor}">
-                                <TextBlock Text="图" FontSize="12" Foreground="#FFFFFFFF"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                              </Border>
-                              <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding ImageSizeText}" FontSize="12"
-                                           Foreground="{DynamicResource FgBrush}" />
-                                <TextBlock Text="点击卡片复制原图" FontSize="10.5" Margin="0,2,0,0"
-                                           Foreground="{DynamicResource FgMuteBrush}" />
-                              </StackPanel>
+                            <StackPanel>
+                              <Image Source="{Binding ThumbSource, IsAsync=True}"
+                                     MaxWidth="320" MaxHeight="104"
+                                     Stretch="Uniform" StretchDirection="DownOnly"
+                                     RenderOptions.BitmapScalingMode="HighQuality"
+                                     HorizontalAlignment="Left" />
+                              <TextBlock Margin="2,5,0,0" FontSize="10.5"
+                                         Foreground="{DynamicResource FgMuteBrush}"
+                                         Text="{Binding ImageSizeText, StringFormat='{}{0} · 点卡片粘贴原图'}" />
                             </StackPanel>
                           </Border>
                         </StackPanel>
