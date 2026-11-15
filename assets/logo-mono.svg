@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="NotchDock logo (mono)">
+  <path d="M 92,92 L 420,92 Q 472,92 472,144 L 472,184 Q 472,236 420,236 L 324,236 L 324,278 Q 324,322 280,322 L 232,322 Q 188,322 188,278 L 188,236 L 92,236 Q 40,236 40,184 L 40,144 Q 40,92 92,92 Z" fill="#FFFFFF"/>
+    <circle cx="104" cy="164" r="11" fill="#FFFFFF"/>
+  <circle cx="142" cy="164" r="11" fill="#FFFFFF"/>
+  <circle cx="180" cy="164" r="11" fill="#FFFFFF"/>
+  <circle cx="256" cy="232" r="30" fill="#FFFFFF"/>
+</svg>

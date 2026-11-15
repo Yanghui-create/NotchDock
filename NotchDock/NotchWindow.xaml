@@ -1,0 +1,661 @@
+<Window x:Class="NotchDock.NotchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="NotchDock"
+        Icon="Assets/NotchDock.ico"
+        Width="214" Height="30"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
+        WindowStartupLocation="Manual" Left="0" Top="0"
+        SnapsToDevicePixels="True" UseLayoutRounding="True"
+        FontFamily="Microsoft YaHei UI, Segoe UI, Microsoft YaHei"
+        FontSize="13"
+        FocusVisualStyle="{x:Null}"
+        TextOptions.TextFormattingMode="Ideal">
+
+  <!-- FocusVisualStyle=None：这个窗口是"贴在屏幕上的装饰层"，绝不该出现系统虚线焦点框 -->
+  <Grid x:Name="Root" Background="Transparent" AllowDrop="True"
+        Focusable="False" FocusVisualStyle="{x:Null}"
+        DragOver="Root_DragOver" Drop="Root_Drop">
+
+    <!-- 窗口尺寸 = 刘海尺寸，由动画逐帧同时改「位置+大小」（一次 SetWindowPos），
+         所以不会出现"尺寸已变、位置滞后"的错位帧，也不会留下大片透明区挡鼠标。 -->
+    <Border x:Name="Shell" Width="214"
+            HorizontalAlignment="Center" VerticalAlignment="Stretch"
+            Background="{DynamicResource ShellBgBrush}"
+            CornerRadius="0,0,24,24" BorderThickness="0,0,1,1"
+            BorderBrush="{DynamicResource StrokeBrush}" ClipToBounds="True">
+      <Grid>
+
+        <!-- ===== 液态玻璃层（只有 Glass 主题才显示）=====
+             分层模仿 iOS 26 Liquid Glass：镜面斜向高光 + 顶部弧光 + 底部内缘折射 -->
+        <Grid x:Name="GlassLayer" Visibility="Collapsed" IsHitTestVisible="False">
+          <Border CornerRadius="0,0,24,24">
+            <Border.Background>
+              <LinearGradientBrush StartPoint="0.12,0" EndPoint="0.88,1">
+                <GradientStop Color="#52FFFFFF" Offset="0" />
+                <GradientStop Color="#1CFFFFFF" Offset="0.18" />
+                <GradientStop Color="#00FFFFFF" Offset="0.48" />
+                <GradientStop Color="#0EFFFFFF" Offset="0.72" />
+                <GradientStop Color="#1A8FB4FF" Offset="1" />
+              </LinearGradientBrush>
+            </Border.Background>
+          </Border>
+
+          <!-- 顶部那道弧光（玻璃边缘的镜面反射） -->
+          <Border Height="2" VerticalAlignment="Top" Margin="20,0,20,0" CornerRadius="1">
+            <Border.Background>
+              <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                <GradientStop Color="#00FFFFFF" Offset="0" />
+                <GradientStop Color="#E0FFFFFF" Offset="0.4" />
+                <GradientStop Color="#FFFFFFFF" Offset="0.58" />
+                <GradientStop Color="#00FFFFFF" Offset="1" />
+              </LinearGradientBrush>
+            </Border.Background>
+          </Border>
+
+          <!-- 内圈亮线：玻璃板的"厚度" -->
+          <Border CornerRadius="0,0,23,23" Margin="1.2"
+                  BorderThickness="1" BorderBrush="#5CFFFFFF" />
+
+          <!-- 底部内缘：上半是被玻璃折射压暗的过渡，最底一条是冷色折射 -->
+          <Border Height="30" VerticalAlignment="Bottom" CornerRadius="0,0,24,24">
+            <Border.Background>
+              <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#00707E9C" Offset="0" />
+                <GradientStop Color="#12808EAE" Offset="0.55" />
+                <GradientStop Color="#3089A6CC" Offset="1" />
+              </LinearGradientBrush>
+            </Border.Background>
+          </Border>
+
+          <!-- 左侧一道细高光，让"玻璃板"有体积 -->
+          <Border Width="1" HorizontalAlignment="Left" Margin="0,10,0,14">
+            <Border.Background>
+              <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#00FFFFFF" Offset="0" />
+                <GradientStop Color="#5AFFFFFF" Offset="0.3" />
+                <GradientStop Color="#00FFFFFF" Offset="0.85" />
+              </LinearGradientBrush>
+            </Border.Background>
+          </Border>
+        </Grid>
+
+        <Grid>
+
+        <!-- ================= 收起态 ================= -->
+        <Grid x:Name="CollapsedLayer" Width="214" Height="30"
+              HorizontalAlignment="Center" VerticalAlignment="Top">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Margin="0,5,0,0">
+            <Ellipse Width="7" Height="7" Fill="{DynamicResource DotBrush}" />
+            <Ellipse Width="3" Height="3" Fill="{DynamicResource DotSmallBrush}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- ================= 展开态 =================
+             内容按"最终展开尺寸"一次性布局好，由外层 Shell 裁剪揭示；
+             动画只改变 Shell 的宽高与圆角，内容不重排，所以全程不掉帧。 -->
+        <Grid x:Name="ContentHost" Opacity="0" IsHitTestVisible="False"
+              HorizontalAlignment="Center" VerticalAlignment="Top"
+              Width="660" Height="520">
+          <Grid.RenderTransform>
+            <TranslateTransform x:Name="ContentShift" Y="-14" />
+          </Grid.RenderTransform>
+          <Grid x:Name="ExpandedLayer">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="52" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+          <!-- 顶部页签栏 -->
+          <Grid Grid.Row="0" Margin="16,0,12,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <Button x:Name="TabFav" Style="{StaticResource PillStyle}" Content="速览" Tag="0"
+                      Click="Tab_Click" Margin="0,0,2,0" />
+              <Button x:Name="TabClip" Style="{StaticResource PillStyle}" Content="剪贴板" Tag="1"
+                      Click="Tab_Click" Margin="0,0,2,0" />
+              <Button x:Name="TabTodo" Style="{StaticResource PillStyle}" Content="待办" Tag="2"
+                      Click="Tab_Click" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+              <Button x:Name="BtnAction" Style="{StaticResource GhostStyle}" Content="全部清除"
+                      Click="BtnAction_Click" Margin="0,0,2,0" />
+              <Button x:Name="BtnSettings" Style="{StaticResource GhostStyle}" Content="⚙"
+                      FontSize="13" Padding="9,2" Margin="0,0,2,0" Click="OpenSettings_Click"
+                      ToolTip="设置（全局快捷键等）" />
+              <Button x:Name="BtnMenu" Style="{StaticResource GhostStyle}" Content="⋯"
+                      FontSize="16" Padding="10,1" Click="BtnMenu_Click" />
+            </StackPanel>
+          </Grid>
+
+          <Grid Grid.Row="1">
+
+            <!-- ===== 页1：速览 ===== -->
+            <Grid x:Name="PaneFav">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+
+              <Border Grid.Row="0" Margin="14,0,14,6" Padding="12,8" CornerRadius="11"
+                      Background="{DynamicResource CardBrush}">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock x:Name="FavHint" Grid.Column="0" Text="把文件、文件夹拖进刘海即可收藏"
+                             FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Style="{StaticResource GhostStyle}" Content="＋ 文件" Click="AddFiles_Click" Margin="0,0,2,0" />
+                    <Button Style="{StaticResource GhostStyle}" Content="＋ 文件夹" Click="AddFolder_Click" Margin="0,0,2,0" />
+                    <Button Style="{StaticResource GhostStyle}" Content="＋ 应用" Click="OpenPicker_Click" />
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+              <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                            Padding="14,0,14,12">
+                <StackPanel>
+                  <TextBlock x:Name="FileHeader" Text="文件" FontSize="11.5"
+                             Foreground="{DynamicResource FgMuteBrush}" Margin="2,2,0,6" />
+                  <ItemsControl x:Name="FileList">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Button Style="{StaticResource TileStyle}" Tag="{Binding}" Click="Tile_Click"
+                                ToolTip="{Binding Target}">
+                          <Button.ContextMenu>
+                            <ContextMenu>
+                              <MenuItem Header="打开" Click="TileMenuOpen_Click" />
+                              <MenuItem Header="在资源管理器中显示" Click="TileMenuReveal_Click" />
+                              <Separator />
+                              <MenuItem Header="移出收藏" Click="TileMenuRemove_Click" />
+                            </ContextMenu>
+                          </Button.ContextMenu>
+                          <StackPanel Width="78">
+                            <Image Source="{Binding Icon}" Width="30" Height="30"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   HorizontalAlignment="Center" />
+                            <TextBlock Text="{Binding Name}" FontSize="11" MaxHeight="28"
+                                       Foreground="{DynamicResource FgDimBrush}" TextAlignment="Center"
+                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="0,7,0,0" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock x:Name="FileEmpty" Text="还没有收藏文件" FontSize="11.5"
+                             Foreground="{DynamicResource FgMuteBrush}" Margin="2,0,0,10" Visibility="Collapsed" />
+
+                  <TextBlock x:Name="AppHeader" Text="应用" FontSize="11.5"
+                             Foreground="{DynamicResource FgMuteBrush}" Margin="2,8,0,6" />
+                  <ItemsControl x:Name="AppList">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Button Style="{StaticResource TileStyle}" Tag="{Binding}" Click="Tile_Click"
+                                ToolTip="{Binding Target}">
+                          <Button.ContextMenu>
+                            <ContextMenu>
+                              <MenuItem Header="打开" Click="TileMenuOpen_Click" />
+                              <MenuItem Header="在资源管理器中显示" Click="TileMenuReveal_Click" />
+                              <Separator />
+                              <MenuItem Header="移出收藏" Click="TileMenuRemove_Click" />
+                            </ContextMenu>
+                          </Button.ContextMenu>
+                          <StackPanel Width="78">
+                            <Image Source="{Binding Icon}" Width="30" Height="30"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   HorizontalAlignment="Center" />
+                            <TextBlock Text="{Binding Name}" FontSize="11" MaxHeight="28"
+                                       Foreground="{DynamicResource FgDimBrush}" TextAlignment="Center"
+                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="0,7,0,0" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock x:Name="AppEmpty" Text="还没有固定应用，点上方「＋ 应用」从中挑选"
+                             FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}" Margin="2,0,0,10" />
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+
+            <!-- ===== 页2：剪贴板历史（仿 TieZ） ===== -->
+            <Grid x:Name="PaneClip" Visibility="Collapsed">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+
+              <!-- 搜索 + 清空 -->
+              <Grid Grid.Row="0" Margin="14,0,14,8">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                  <TextBox x:Name="ClipSearch" Style="{StaticResource DarkInput}" Height="34"
+                           TextChanged="ClipSearch_TextChanged" />
+                  <TextBlock x:Name="ClipSearchHint" Text="搜索复制过的内容…" FontSize="12.5"
+                             Foreground="{DynamicResource FgMuteBrush}" Margin="12,0,0,0"
+                             VerticalAlignment="Center" IsHitTestVisible="False" />
+                </Grid>
+
+                <Button Grid.Column="1" Style="{StaticResource GhostStyle}" Content="清空"
+                        Click="ClipClear_Click" Margin="6,0,0,0" Height="34" />
+              </Grid>
+
+              <!-- 分类 -->
+              <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden"
+                            VerticalScrollBarVisibility="Disabled" Margin="14,0,14,8">
+                <StackPanel Orientation="Horizontal">
+                  <Button Style="{StaticResource PillStyle}" Content="全部" Tag="all"
+                          FontSize="12" Padding="11,5" Margin="0,0,3,0" Click="ClipFilter_Click" />
+                  <Button Style="{StaticResource PillStyle}" Content="文字" Tag="text"
+                          FontSize="12" Padding="11,5" Margin="0,0,3,0" Click="ClipFilter_Click" />
+                  <Button Style="{StaticResource PillStyle}" Content="图片" Tag="image"
+                          FontSize="12" Padding="11,5" Margin="0,0,3,0" Click="ClipFilter_Click" />
+                  <Button Style="{StaticResource PillStyle}" Content="文件" Tag="file"
+                          FontSize="12" Padding="11,5" Margin="0,0,3,0" Click="ClipFilter_Click" />
+                  <Button Style="{StaticResource PillStyle}" Content="URL" Tag="url"
+                          FontSize="12" Padding="11,5" Margin="0,0,3,0" Click="ClipFilter_Click" />
+                  <Button Style="{StaticResource PillStyle}" Content="代码" Tag="code"
+                          FontSize="12" Padding="11,5" Click="ClipFilter_Click" />
+                </StackPanel>
+              </ScrollViewer>
+
+              <!-- 列表 -->
+              <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled" Padding="14,0,14,12">
+                <ItemsControl x:Name="ClipList">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Margin="0,0,0,7" CornerRadius="12" Padding="11,9"
+                              Background="{DynamicResource CardBrush}"
+                              BorderThickness="1" BorderBrush="Transparent"
+                              Cursor="Hand" Tag="{Binding}"
+                              ToolTip="点一下就粘贴到刚才的位置"
+                              MouseLeftButtonUp="ClipCard_Click">
+                        <Border.Style>
+                          <Style TargetType="Border">
+                            <Style.Triggers>
+                              <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+                              </Trigger>
+                              <DataTrigger Binding="{Binding Pinned}" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource AccentSoftBrush}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </Border.Style>
+
+                        <StackPanel>
+                          <!-- 来源行 -->
+                          <Grid>
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="Auto" />
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Width="18" Height="18" CornerRadius="5"
+                                    Background="{Binding KindColor}" VerticalAlignment="Center">
+                              <TextBlock Text="{Binding KindGlyph}" FontSize="10" Foreground="#FFFFFFFF"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="7,0,0,0"
+                                        VerticalAlignment="Center">
+                              <TextBlock Text="{Binding Source}" FontSize="11"
+                                         Foreground="{DynamicResource FgDimBrush}" />
+                              <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource FgMuteBrush}" />
+                              <TextBlock Text="{Binding KindLabel}" FontSize="11"
+                                         Foreground="{DynamicResource FgMuteBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                              <Button Style="{StaticResource GhostStyle}" Content="复制" FontSize="11"
+                                      Padding="7,2" Tag="{Binding}" Click="ClipCopy_Click" />
+                              <Button Style="{StaticResource GhostStyle}" Content="{Binding PinGlyph}" FontSize="11"
+                                      Padding="7,2" Margin="2,0,0,0" Tag="{Binding}" Click="ClipPin_Click" />
+                              <Button Style="{StaticResource DangerGhostStyle}" Content="删" FontSize="11"
+                                      Padding="7,2" Margin="2,0,0,0" Tag="{Binding}" Click="ClipDelete_Click" />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="3" Text="{Binding TimeText}" FontSize="11"
+                                       Foreground="{DynamicResource FgMuteBrush}"
+                                       Margin="10,0,0,0" VerticalAlignment="Center" />
+                          </Grid>
+
+                          <!-- 文本预览 -->
+                          <TextBlock Text="{Binding Preview}" FontSize="12.5" Margin="0,7,0,0"
+                                     Foreground="{DynamicResource FgBrush}" TextWrapping="Wrap"
+                                     MaxHeight="62" TextTrimming="CharacterEllipsis"
+                                     Visibility="{Binding ShowText, Converter={StaticResource BoolVis}}" />
+
+                          <!-- 图片预览 -->
+                          <!-- 缩略图：分层窗口里 Image 控件的解码结果画不出来，这里做成信息块，
+                               点击卡片仍可直接把原图复制回剪贴板 -->
+                          <Border Margin="0,7,0,0" Height="72" Width="218" CornerRadius="9"
+                                  HorizontalAlignment="Left" Background="{DynamicResource CardHoverBrush}"
+                                  Visibility="{Binding HasImage, Converter={StaticResource BoolVis}}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                              <Border Width="28" Height="28" CornerRadius="7" Background="{Binding KindColor}">
+                                <TextBlock Text="图" FontSize="12" Foreground="#FFFFFFFF"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                              </Border>
+                              <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ImageSizeText}" FontSize="12"
+                                           Foreground="{DynamicResource FgBrush}" />
+                                <TextBlock Text="点击卡片复制原图" FontSize="10.5" Margin="0,2,0,0"
+                                           Foreground="{DynamicResource FgMuteBrush}" />
+                              </StackPanel>
+                            </StackPanel>
+                          </Border>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+
+              <TextBlock x:Name="ClipEmpty" Grid.Row="2" Text="还没有复制记录" FontSize="12"
+                         Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center"
+                         VerticalAlignment="Center" IsHitTestVisible="False" />
+            </Grid>
+
+            <!-- ===== 页3：待办 ===== -->
+            <Grid x:Name="PaneTodo" Visibility="Collapsed">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <Border Grid.Row="0" Margin="14,0,14,8" Padding="12,10" CornerRadius="12"
+                      Background="{DynamicResource CardBrush}">
+                <StackPanel>
+                  <Grid>
+                    <TextBox x:Name="TodoTitle" Style="{StaticResource DarkInput}" Height="34" />
+                    <TextBlock x:Name="TodoTitleHint" Text="要做什么？例如：给王总回电话" FontSize="12.5"
+                               Foreground="{DynamicResource FgMuteBrush}" Margin="12,0,0,0"
+                               VerticalAlignment="Center" IsHitTestVisible="False" />
+                  </Grid>
+                  <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="截止" FontSize="11.5" VerticalAlignment="Center"
+                               Foreground="{DynamicResource FgMuteBrush}" Margin="0,0,6,0" />
+                    <TextBox x:Name="TodoDue" Grid.Column="1" Style="{StaticResource DarkInput}"
+                             Width="122" Height="30" FontSize="12" Padding="9,0" />
+                    <TextBlock Grid.Column="2" Text="提前" FontSize="11.5" VerticalAlignment="Center"
+                               Foreground="{DynamicResource FgMuteBrush}" Margin="10,0,6,0" />
+                    <TextBox x:Name="TodoBefore" Grid.Column="3" Style="{StaticResource DarkInput}"
+                             Width="52" Height="30" FontSize="12" Padding="9,0" Text="15" />
+                    <TextBlock Grid.Column="4" Text="分钟" FontSize="11.5" VerticalAlignment="Center"
+                               Foreground="{DynamicResource FgMuteBrush}" Margin="6,0,0,0" />
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center"
+                                HorizontalAlignment="Right" Margin="8,0,8,0">
+                      <Button Style="{StaticResource GhostStyle}" Content="30分" Tag="30" Click="QuickBefore_Click" Margin="0,0,2,0" />
+                      <Button Style="{StaticResource GhostStyle}" Content="1小时" Tag="60" Click="QuickBefore_Click" Margin="0,0,2,0" />
+                      <Button Style="{StaticResource GhostStyle}" Content="1天" Tag="1440" Click="QuickBefore_Click" />
+                    </StackPanel>
+                    <Button Grid.Column="6" Content="添加" Click="AddTodo_Click"
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource BadgeTextBrush}"
+                            FontSize="12.5" FontWeight="SemiBold" Padding="14,6" Cursor="Hand" BorderThickness="0">
+                      <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                          <Border Background="{TemplateBinding Background}" CornerRadius="9"
+                                  Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          </Border>
+                        </ControlTemplate>
+                      </Button.Template>
+                    </Button>
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                            Padding="14,0,14,12">
+                <ItemsControl x:Name="TodoList">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Margin="0,0,0,6" Padding="11,9" CornerRadius="12" Background="{DynamicResource CardBrush}">
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <CheckBox Grid.Column="0" Style="{StaticResource DarkCheck}" VerticalAlignment="Center"
+                                    IsChecked="{Binding Done, Mode=TwoWay}" Click="TodoCheck_Click" />
+                          <StackPanel Grid.Column="1" Margin="11,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" FontSize="12.5" TextWrapping="Wrap">
+                              <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                  <Setter Property="Foreground" Value="{DynamicResource FgBrush}" />
+                                  <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Done}" Value="True">
+                                      <Setter Property="TextDecorations" Value="Strikethrough" />
+                                      <Setter Property="Foreground" Value="{DynamicResource FgMuteBrush}" />
+                                    </DataTrigger>
+                                  </Style.Triggers>
+                                </Style>
+                              </TextBlock.Style>
+                            </TextBlock>
+                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                              <TextBlock Text="{Binding DueText}" FontSize="11" Foreground="{DynamicResource FgDimBrush}" />
+                              <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource FgMuteBrush}" />
+                              <TextBlock Text="{Binding BeforeText}" FontSize="11" Foreground="{DynamicResource FgDimBrush}" />
+                              <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource FgMuteBrush}" />
+                              <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource FgMuteBrush}" />
+                            </StackPanel>
+                          </StackPanel>
+                          <Button Grid.Column="2" Style="{StaticResource GhostStyle}" Content="稍后"
+                                  Click="TodoSnooze_Click" Margin="0,0,2,0" VerticalAlignment="Center" />
+                          <Button Grid.Column="3" Style="{StaticResource GhostStyle}" Content="✕"
+                                  Click="TodoDelete_Click" VerticalAlignment="Center" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+
+              <TextBlock x:Name="TodoEmpty" Grid.Row="1" Text="今天没有待办" FontSize="12"
+                         Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center"
+                         VerticalAlignment="Center" />
+
+              <TextBlock Grid.Row="2" x:Name="TodoFooter" Text="" FontSize="11"
+                         Foreground="{DynamicResource FgMuteBrush}" Margin="16,0,16,10" />
+            </Grid>
+
+            <!-- ===== 应用库浮层 ===== -->
+            <Border x:Name="PickerOverlay" Visibility="Collapsed" Background="{DynamicResource OverlayBrush}"
+                    CornerRadius="0,0,24,24">
+              <Grid Margin="16,8,16,14">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                  <TextBlock Text="应用库" FontSize="13.5" FontWeight="SemiBold"
+                             Foreground="{DynamicResource FgBrush}" VerticalAlignment="Center" />
+                  <Button Style="{StaticResource GhostStyle}" Content="关闭" HorizontalAlignment="Right"
+                          Click="ClosePicker_Click" />
+                </Grid>
+                <Grid Grid.Row="1" Margin="0,10,0,10">
+                  <TextBox x:Name="PickerSearch" Style="{StaticResource DarkInput}" Height="32"
+                           TextChanged="PickerSearch_TextChanged" />
+                  <TextBlock x:Name="PickerHint" Text="搜索已安装应用…" FontSize="12.5"
+                             Foreground="{DynamicResource FgMuteBrush}" Margin="12,0,0,0"
+                             VerticalAlignment="Center" IsHitTestVisible="False" />
+                </Grid>
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="PickerList">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Button Tag="{Binding}" Click="PickerItem_Click" HorizontalContentAlignment="Stretch"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand" Margin="0,0,0,2">
+                          <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                              <Border x:Name="bd" Background="Transparent" CornerRadius="9" Padding="8,6">
+                                <Grid>
+                                  <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                  </Grid.ColumnDefinitions>
+                                  <Image Grid.Column="0" Source="{Binding Icon}" Width="20" Height="20"
+                                         RenderOptions.BitmapScalingMode="HighQuality" />
+                                  <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Margin="10,0,0,0"
+                                             Foreground="{DynamicResource FgBrush}" VerticalAlignment="Center"
+                                             TextTrimming="CharacterEllipsis" />
+                                  <TextBlock Grid.Column="2" FontSize="11" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                      <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="添加" />
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                        <Style.Triggers>
+                                          <DataTrigger Binding="{Binding IsAdded}" Value="True">
+                                            <Setter Property="Text" Value="已添加" />
+                                            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                                          </DataTrigger>
+                                        </Style.Triggers>
+                                      </Style>
+                                    </TextBlock.Style>
+                                  </TextBlock>
+                                </Grid>
+                              </Border>
+                              <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                  <Setter TargetName="bd" Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                </Trigger>
+                              </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                          </Button.Template>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Grid>
+            </Border>
+
+            <!-- ===== 设置浮层 ===== -->
+            <Border x:Name="SettingsOverlay" Visibility="Collapsed" Background="{DynamicResource OverlayBrush}"
+                    CornerRadius="0,0,24,24">
+              <Grid Margin="20,10,20,16">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                  <TextBlock Text="设置" FontSize="13.5" FontWeight="SemiBold"
+                             Foreground="{DynamicResource FgBrush}" VerticalAlignment="Center" />
+                  <Button Style="{StaticResource GhostStyle}" Content="关闭" HorizontalAlignment="Right"
+                          Click="CloseSettings_Click" />
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <StackPanel>
+
+                    <!-- 全局快捷键 -->
+                    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Padding="14,12">
+                      <StackPanel>
+                        <TextBlock Text="剪贴板快捷键" FontSize="12.5" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource FgBrush}" />
+                        <TextBlock Text="在任意程序里按这组键，直接呼出剪贴板面板。默认接管系统自带的 Win+V。"
+                                   FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}"
+                                   TextWrapping="Wrap" Margin="0,4,0,11" />
+
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+
+                          <Border Grid.Column="0" CornerRadius="9" Padding="12,7"
+                                  Background="{DynamicResource BtnFillBrush}"
+                                  BorderThickness="1" BorderBrush="{DynamicResource StrokeBrush}">
+                            <TextBlock x:Name="HotKeyText" Text="Win + V" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource FgBrush}" />
+                          </Border>
+
+                          <TextBlock x:Name="HotKeyStatus" Grid.Column="1" FontSize="11.5" Margin="11,0,11,0"
+                                     VerticalAlignment="Center" TextWrapping="Wrap"
+                                     Foreground="{DynamicResource SuccessBrush}" Text="已生效" />
+
+                          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BtnRecord" Style="{StaticResource GhostStyle}" Content="录制"
+                                    Click="RecordHotKey_Click" />
+                            <Button Style="{StaticResource GhostStyle}" Content="恢复默认" Margin="4,0,0,0"
+                                    Click="ResetHotKey_Click" />
+                          </StackPanel>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                          <CheckBox x:Name="HotKeyToggle" Style="{StaticResource DarkCheck}" VerticalAlignment="Center"
+                                    Click="HotKeyToggle_Click" />
+                          <TextBlock Text="启用全局快捷键" FontSize="12" Margin="8,0,0,0" Cursor="Hand"
+                                     Foreground="{DynamicResource FgDimBrush}" VerticalAlignment="Center"
+                                     MouseLeftButtonUp="HotKeyLabel_Click" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+
+                    <!-- 说明 -->
+                    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Padding="14,12" Margin="0,10,0,0">
+                      <StackPanel>
+                        <TextBlock Text="关于 Win+V" FontSize="12.5" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource FgBrush}" />
+                        <TextBlock FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}"
+                                   TextWrapping="Wrap" LineHeight="18" Margin="0,5,0,0"
+                                   Text="Windows 自带的「剪贴板历史」也用 Win+V。这里用 RegisterHotKey 把这组键注册过来，系统那套面板就不会再弹出来。若状态栏显示「被占用」，说明有别的软件抢先注册了，换一组键即可。" />
+                      </StackPanel>
+                    </Border>
+
+                  </StackPanel>
+                </ScrollViewer>
+              </Grid>
+            </Border>
+
+          </Grid>
+        </Grid>
+        </Grid>
+      </Grid>
+
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

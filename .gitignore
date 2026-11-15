@@ -1,0 +1,32 @@
+## .NET / Visual Studio 构建产物
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/
+.idea/
+
+## 调试符号（发布目录不分发）
+*.pdb
+
+## 运行期个人数据：剪贴板历史、配置、日志、图片缓存
+## 这些文件含隐私，绝不入库
+clips.json
+config.json
+notchdock.log
+clips/
+**/NotchDock/clips/
+
+## 本机工作区私有目录（调试截图 / 备份 / 下载缓存）
+.cache/
+shots/
+.workbuddy/
+private-backup/
+
+## 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store

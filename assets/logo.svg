@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="NotchDock logo">
+  <defs>
+    <linearGradient id="nd-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2B3050"/>
+      <stop offset="0.55" stop-color="#121526"/>
+      <stop offset="1" stop-color="#0A0C16"/>
+    </linearGradient>
+    <linearGradient id="nd-edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8FB4FF"/>
+      <stop offset="0.5" stop-color="#6E7CFF"/>
+      <stop offset="1" stop-color="#C07BFF"/>
+    </linearGradient>
+    <linearGradient id="nd-hilite" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="nd-ball" cx="0.38" cy="0.3" r="0.75">
+      <stop offset="0" stop-color="#B0CEFF"/>
+      <stop offset="0.55" stop-color="#6E7CFF"/>
+      <stop offset="1" stop-color="#543AC8"/>
+    </radialGradient>
+    <radialGradient id="nd-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#8CA0FF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#8CA0FF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="nd-blur" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <clipPath id="nd-clip"><path d="M 92,92 L 420,92 Q 472,92 472,144 L 472,184 Q 472,236 420,236 L 324,236 L 324,278 Q 324,322 280,322 L 232,322 Q 188,322 188,278 L 188,236 L 92,236 Q 40,236 40,184 L 40,144 Q 40,92 92,92 Z"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#nd-clip)">
+    <path d="M 92,92 L 420,92 Q 472,92 472,144 L 472,184 Q 472,236 420,236 L 324,236 L 324,278 Q 324,322 280,322 L 232,322 Q 188,322 188,278 L 188,236 L 92,236 Q 40,236 40,184 L 40,144 Q 40,92 92,92 Z" fill="url(#nd-body)"/>
+    <circle cx="140" cy="110" r="170" fill="#4660C0" opacity="0.20" filter="url(#nd-blur)"/>
+    <circle cx="410" cy="300" r="150" fill="#7A3AA0" opacity="0.16" filter="url(#nd-blur)"/>
+    <path d="M 100,98 L 412,98" stroke="url(#nd-hilite)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 196,310 Q 256,338 316,310" stroke="#96B4FF" stroke-width="2" fill="none" opacity="0.28"/>
+  </g>
+  <path d="M 92,92 L 420,92 Q 472,92 472,144 L 472,184 Q 472,236 420,236 L 324,236 L 324,278 Q 324,322 280,322 L 232,322 Q 188,322 188,278 L 188,236 L 92,236 Q 40,236 40,184 L 40,144 Q 40,92 92,92 Z" fill="none" stroke="#8CA0FF" stroke-width="14" opacity="0.18" filter="url(#nd-blur)"/>
+  <path d="M 92,92 L 420,92 Q 472,92 472,144 L 472,184 Q 472,236 420,236 L 324,236 L 324,278 Q 324,322 280,322 L 232,322 Q 188,322 188,278 L 188,236 L 92,236 Q 40,236 40,184 L 40,144 Q 40,92 92,92 Z" fill="none" stroke="url(#nd-edge)" stroke-width="4"/>
+
+    <circle cx="104" cy="164" r="11" fill="#4DA3FF"/>
+  <circle cx="100" cy="159" r="3.2" fill="#FFFFFF" opacity="0.42"/>
+  <circle cx="142" cy="164" r="11" fill="#B57BFF"/>
+  <circle cx="138" cy="159" r="3.2" fill="#FFFFFF" opacity="0.42"/>
+  <circle cx="180" cy="164" r="11" fill="#5BE7C4"/>
+  <circle cx="176" cy="159" r="3.2" fill="#FFFFFF" opacity="0.42"/>
+
+  <circle cx="256" cy="232" r="58" fill="url(#nd-glow)"/>
+  <circle cx="256" cy="232" r="30" fill="url(#nd-ball)"/>
+  <circle cx="249" cy="222" r="6" fill="#FFFFFF" opacity="0.62"/>
+</svg>
