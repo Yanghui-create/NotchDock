@@ -115,8 +115,19 @@ TieZ 那种「点一下，内容直接出现在刚才的光标处」，最省事
 
 唯一需要兜底的是"前台已经落到自己身上"（从托盘展开时 `Activate()` 过、或打开了 ⋯ 菜单）。`FocusKeeper` 每 400ms 记一次"最近一个不属于本进程的前台窗口"，真到那时用 `AttachThreadInput` + `SetForegroundWindow` 把焦点还回去，等 140ms 再发键。两条路径都实测过（`tools/PasteSink` 做靶子，验证文本确实进了目标 TextBox）。
 
-**4.1 抢 Win+V 用 RegisterHotKey，不用键盘钩子**
-`RegisterHotKey(MOD_WIN, V)` 实测返回成功——Win+V 并不在 explorer 的注册名单里（它走 shell 自己的哨兵）。注册成功即意味着系统不再处理这组键，比 `WH_KEYBOARD_LL` 干净：不会让系统误判 Win 仍按着、不干扰输入法与游戏、还能用 `MOD_NOREPEAT` 关掉长按重复。
+**4.1 抢 Win+V：先 RegisterHotKey，抢不到就按 TieZ 的方式让系统让路**
+`RegisterHotKey(MOD_WIN, V)` 在系统剪贴板历史关闭时实测返回成功——Win+V 并不在 explorer 的注册名单里（它走 shell 自己的哨兵）。注册成功即意味着系统不再处理这组键，比 `WH_KEYBOARD_LL` 干净：不会让系统误判 Win 仍按着、不干扰输入法与游戏、还能用 `MOD_NOREPEAT` 关掉长按重复。
+
+但剪贴板历史一旦被打开（用户按 Win+V 时点了系统那个"是否开启"的提示），explorer 就先注册了 Win+V，`RegisterHotKey` 直接失败（err=1409）。研究开源剪贴板工具 TieZ（github.com/jimuzhe/tiez-clipboard）后发现它的解法非常干净——不吞键、不上钩子，而是动用 **Explorer 的官方注册表开关 `DisabledHotkeys`**（其源码注释："Windows disables Explorer's Win+V handler before assigning it to TieZ"）：
+
+```
+HKCU\...\Explorer\Advanced\DisabledHotkeys += "V"        ← explorer 层面禁用 Win+V
+HKCU\Software\Microsoft\Clipboard\EnableClipboardHistory = 0
+HKCU\Software\Microsoft\Clipboard\EnableCloudClipboard   = 0
+重启 explorer（旧进程一死热键即释放，新进程读到禁用列表不会再抢）
+```
+
+NotchDock 照此实现（`WinVOptimizer`）：注册 Win+V 失败时自动执行上述优化并重试，实测从"注册失败"到"接管成功"只需约 1 秒；设置里提供「恢复系统剪贴板历史（撤销接管）」一键还原。副作用：按 Win+V 不再弹系统历史面板，由 NotchDock 顶上——它本来就有剪贴板历史。
 
 只有"录制新组合键"必须用钩子：刘海窗口是 `WS_EX_NOACTIVATE`，点它拿不到键盘焦点，`KeyDown` 收不到，只能短暂挂一个 `WH_KEYBOARD_LL` 截一次。
 **踩坑**：低级键盘钩子上报的修饰键是**左右分开的键码**（`0xA0` 到 `0xA5`），只过滤通用码（`0x10` 到 `0x12`）会把左 Alt 当成主键录进去，出现 `Ctrl+VKA4` 这种鬼东西。

@@ -694,12 +694,48 @@ public partial class NotchWindow : Window
 
         if (!HotKey.TryParse(Store.Config.HotKey, out var hk)) hk = HotKey.Default;
 
-        if (!_hotKey.TryApply(hk, out var error))
+        _ = ApplyHotKeyAsync(hk);
+    }
+
+    /// <summary>
+    /// 注册热键；目标是 Win+V 且被系统占用（剪贴板历史开着）时，
+    /// 执行 TieZ 同款的注册表优化（DisabledHotkeys += V + 关系统剪贴板历史 + 重启
+    /// explorer），然后重试——系统让出这组键后 RegisterHotKey 就能成功。
+    /// </summary>
+    private async Task ApplyHotKeyAsync(HotKey hk)
+    {
+        if (_hotKey.TryApply(hk, out var error))
         {
-            Log.Write($"hotkey: {error}");
+            RefreshHotKeyUi();
+            return;
         }
 
+        Log.Write($"hotkey: {error}");
+
+        if (hk.Equals(HotKey.WinV))
+            await OptimizeAndRetryAsync(hk);
+
         RefreshHotKeyUi();
+    }
+
+    /// <summary>TieZ 同款：禁用系统对 Win+V 的处理、重启 explorer、重试注册。</summary>
+    private async Task<bool> OptimizeAndRetryAsync(HotKey hk)
+    {
+        var changed = WinVOptimizer.Apply();
+        if (changed) WinVOptimizer.RestartExplorer();
+
+        // explorer 旧进程一死它注册的 Win+V 立即释放；多试几轮避开新进程启动期
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            await Task.Delay(900);
+            if (_hotKey.Capturing) return false;
+            if (_hotKey.TryApply(hk, out _))
+            {
+                Log.Write("hotkey: 优化后注册成功，Win+V 已接管");
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>把当前键位与状态刷到设置界面</summary>
@@ -749,7 +785,7 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>点了「接管 Win+V」：直接把这组键注册过来，不用进设置里改</summary>
-    private void BtnWinV_Click(object sender, RoutedEventArgs e)
+    private async void BtnWinV_Click(object sender, RoutedEventArgs e)
     {
         if (Store.Config.HotKeyEnabled && _hotKey.IsRegistered && _hotKey.Current.Equals(HotKey.WinV))
         {
@@ -757,7 +793,7 @@ public partial class NotchWindow : Window
             return;
         }
 
-        if (TrySaveHotKey(HotKey.WinV))
+        if (await TrySaveHotKey(HotKey.WinV))
             FlashHint("已接管 Win+V，按下即可呼出剪贴板");
         else
             FlashHint(HotKeyFailureHint(HotKey.WinV, "Win+V 被占用"), 4.5);
@@ -835,6 +871,21 @@ public partial class NotchWindow : Window
         FlashSettingsHint("已打开数据目录");
     }
 
+    private async void RevertWinV_Click(object sender, RoutedEventArgs e)
+    {
+        var changed = WinVOptimizer.Revert();
+        if (!changed)
+        {
+            FlashHint("系统剪贴板历史本来就是开启状态");
+            return;
+        }
+
+        WinVOptimizer.RestartExplorer();
+        FlashHint("已撤销接管，系统剪贴板历史已恢复，explorer 重启中…", 4);
+        await Task.Delay(2500);
+        FlashHint("若要把 Win+V 让给系统，请在上方换一个快捷键", 4);
+    }
+
     private void QuitApp_Click(object sender, RoutedEventArgs e) => (Application.Current as App)?.ExitApp();
 
     /// <summary>设置面板顶部的一行瞬时反馈（自动消失）</summary>
@@ -869,7 +920,7 @@ public partial class NotchWindow : Window
 
         if (result is { } captured)
         {
-            if (TrySaveHotKey(captured))
+            if (await TrySaveHotKey(captured))
                 FlashHint($"快捷键已改为 {captured.Pretty}");
         }
         else
@@ -878,29 +929,38 @@ public partial class NotchWindow : Window
         }
     }
 
-    private void ResetHotKey_Click(object sender, RoutedEventArgs e)
+    private async void ResetHotKey_Click(object sender, RoutedEventArgs e)
     {
-        if (TrySaveHotKey(HotKey.Default))
+        if (await TrySaveHotKey(HotKey.Default))
             FlashHint($"快捷键已恢复为 {HotKey.Default.Pretty}");
     }
 
-    private bool TrySaveHotKey(HotKey hk)
+    private async Task<bool> TrySaveHotKey(HotKey hk)
     {
         var previous = Store.Config.HotKey;
         Store.Config.HotKey = hk.Display;
         Store.Config.HotKeyEnabled = true;
 
-        if (!_hotKey.TryApply(hk, out var error))
+        if (_hotKey.TryApply(hk, out var error))
         {
-            Store.Config.HotKey = previous;   // 没注册成功就不改配置，别把占不到的键留在设置里
+            if (!_previewMode) Store.Save();
             RefreshHotKeyUi();
-            FlashHint(HotKeyFailureHint(hk, error), 4.5);
-            return false;
+            return true;
         }
 
-        if (!_previewMode) Store.Save();
+        // Win+V 被系统占用 → TieZ 同款优化后重试
+        if (hk.Equals(HotKey.WinV) && await OptimizeAndRetryAsync(hk))
+        {
+            if (!_previewMode) Store.Save();
+            RefreshHotKeyUi();
+            FlashHint("系统剪贴板历史占着 Win+V，已自动禁用它并接管", 4.5);
+            return true;
+        }
+
+        Store.Config.HotKey = previous;   // 没注册成功就不改配置，别把占不到的键留在设置里
         RefreshHotKeyUi();
-        return true;
+        FlashHint(HotKeyFailureHint(hk, error), 4.5);
+        return false;
     }
 
     private static readonly HotKey[] FallbackKeys =

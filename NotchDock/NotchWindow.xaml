@@ -736,11 +736,15 @@
                     <!-- 说明 -->
                     <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Padding="14,12" Margin="0,10,0,0">
                       <StackPanel>
-                        <TextBlock Text="关于 Win+V" FontSize="12.5" FontWeight="SemiBold"
+                        <TextBlock Text="关于 Win+V 的接管机制" FontSize="12.5" FontWeight="SemiBold"
                                    Foreground="{DynamicResource FgBrush}" />
                         <TextBlock FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}"
                                    TextWrapping="Wrap" LineHeight="18" Margin="0,5,0,0"
-                                   Text="若显示「被占用」：最常见的元凶是 Windows 自带的剪贴板历史——去 设置 → 系统 → 剪贴板 关掉「剪贴板历史记录」，回来点「恢复默认」就能拿回 Win+V；否则就是别的软件抢先注册了，换录一组键即可，失败时会直接告诉你哪个键当下可用。" />
+                                   Text="Win+V 默认由系统剪贴板历史占用，直接注册抢不到。接管时会自动写入 Explorer 的官方开关 DisabledHotkeys 并关闭系统剪贴板历史（与开源剪贴板工具 TieZ 的做法相同），再重启一次资源管理器让系统释放这组键——桌面会闪几秒，属正常。副作用是按 Win+V 不再弹出系统历史面板，由本程序顶上。" />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                          <Button Style="{StaticResource GhostStyle}" Content="恢复系统剪贴板历史（撤销接管）"
+                                  Click="RevertWinV_Click" FontSize="11.5" Padding="9,4" />
+                        </StackPanel>
                       </StackPanel>
                     </Border>
 
