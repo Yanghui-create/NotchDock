@@ -69,6 +69,10 @@ internal static class Native
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     public static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint ExtractIconEx(string lpszFile, int nIconIndex,
+        out IntPtr phiconLarge, out IntPtr phiconSmall, uint nIcons);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool DestroyIcon(IntPtr hIcon);
 

@@ -68,6 +68,7 @@ public sealed class FavoriteItem : ObservableObject
 public sealed class TodoItem : ObservableObject
 {
     private string _title = "";
+    private string _description = "";
     private DateTime _due = DateTime.Now.AddHours(1);
     private int _beforeMinutes = 15;
     private bool _done;
@@ -75,10 +76,14 @@ public sealed class TodoItem : ObservableObject
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Title { get => _title; set { Set(ref _title, value); RaiseAll(); } }
+    /// <summary>待办描述（可空，创建时可展开填写）。旧数据反序列化后为空字符串，天然兼容。</summary>
+    public string Description { get => _description; set { Set(ref _description, value); RaiseAll(); } }
     public DateTime Due { get => _due; set { Set(ref _due, value); RaiseAll(); } }
     public int BeforeMinutes { get => _beforeMinutes; set { Set(ref _beforeMinutes, value); RaiseAll(); } }
     public bool Done { get => _done; set { Set(ref _done, value); RaiseAll(); } }
     public bool Fired { get => _fired; set { Set(ref _fired, value); RaiseAll(); } }
+
+    [JsonIgnore] public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
 
     /// <summary>已到提醒时刻（截止时间 - 提前量）</summary>
     [JsonIgnore] public DateTime FireAt => Due.AddMinutes(-BeforeMinutes);
@@ -119,6 +124,9 @@ public sealed class AppConfig
 
     public double ExpandedWidth { get; set; } = 660;
     public double ExpandedHeight { get; set; } = 520;
+
+    /// <summary>刘海横向停靠位置（屏幕 Left）。-1 = 未设置，取屏幕居中。</summary>
+    public double DockLeft { get; set; } = -1;
     public bool PlaySound { get; set; } = true;
     public bool ShowBadge { get; set; } = true;
     public bool CollapseOnBlur { get; set; } = true;

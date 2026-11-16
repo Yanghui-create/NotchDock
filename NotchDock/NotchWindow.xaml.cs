@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows.Data;
 using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
 using System.Media;
@@ -14,9 +15,19 @@ namespace NotchDock;
 
 public partial class NotchWindow : Window
 {
+    // 收起态 = MacBook 刘海：贴顶、只有底部圆角
     private const double CollapsedWidth = 214;
     private const double CollapsedHeight = 30;
-    private const double CornerRadiusValue = 24;
+    private const double CornerRadiusValue = 24; // 底部圆角
+
+    // 窗口横向停靠位置（可拖动）。NaN = 尚未初始化，SetupWindow 里取屏幕居中。
+    private double _dockLeft = double.NaN;
+
+    // 拖动状态：记录按下瞬间的鼠标屏幕 X 与窗口 Left，移动时按差值直接改 Left（跟手、无补间）
+    private bool _dragging;
+    private int _dragStartCursorX;
+    private double _dragStartLeft;
+    private bool _pinnedBeforeDrag;
 
     // macOS 刘海手感：宽度先起、高度稍滞后、内容最后淡入并轻微下落
     private const int ExpandWidthMs = 300;
@@ -55,6 +66,20 @@ public partial class NotchWindow : Window
     private readonly FullscreenDetector _fullscreenDetector = new();
     private DispatcherTimer _gameWatch = null!;
 
+    // ===== 截止时间日历浮层状态 =====
+    private int _calYear, _calMonth;         // 当前显示的年月
+    private DateTime _calSelected;           // 选中的日期
+    private bool _showDone;                  // 底部开关：是否显示已完成待办
+
+    private sealed class CalDay
+    {
+        public DateTime Date { get; init; }
+        public string Label { get; init; } = "";
+        public bool InMonth { get; init; }
+        public bool IsToday { get; init; }
+        public bool IsSelected { get; init; }
+    }
+
     /// <summary>
     /// 剪贴板列表是否需要重建。展开/切到剪贴板页时，没有新内容就原样显示——
     /// 之前每次展开都无条件 RebuildClips()，几百条记录会整表重建并实例化几百张卡片，
@@ -76,6 +101,9 @@ public partial class NotchWindow : Window
     public NotchWindow()
     {
         InitializeComponent();
+
+        // 读取上次拖动保存的横向位置（-1/NaN = 未设置，SetupWindow 会取屏幕居中）
+        _dockLeft = Store.Config.DockLeft < 0 ? double.NaN : Store.Config.DockLeft;
 
         _scheduler = new TodoScheduler(Store.Config.Todos);
         _scheduler.Fired += OnTodoFired;
@@ -301,14 +329,17 @@ public partial class NotchWindow : Window
 
         Width = ExpW;
         Height = CollapsedHeight;
-        Left = Math.Round((SystemParameters.PrimaryScreenWidth - ExpW) / 2);
-        Top = 0;
+        if (double.IsNaN(_dockLeft))
+            _dockLeft = Math.Round((SystemParameters.PrimaryScreenWidth - ExpW) / 2);
+        _dockLeft = Math.Clamp(_dockLeft, 0, Math.Max(0, SystemParameters.PrimaryScreenWidth - ExpW));
+        Left = _dockLeft;   // 记住拖动后的横向位置
+        Top = 0;            // 始终吸附屏幕顶部
 
         _winW = ExpW;
         _winH = CollapsedHeight;
 
         Shell.Width = CollapsedWidth;
-        Shell.CornerRadius = new CornerRadius(0, 0, CornerRadiusValue, CornerRadiusValue);
+        Shell.CornerRadius = new CornerRadius(0, 0, CornerRadiusValue, CornerRadiusValue);   // MacBook 刘海：只底部圆
     }
 
     public void Reposition()
@@ -319,6 +350,74 @@ public partial class NotchWindow : Window
             Shell.Width = ExpW;
             Height = ExpH;
         }
+    }
+
+    // ===================== 拖动（顶部吸附、横向跟手） =====================
+
+    private const int DragThreshold = 4;   // 超过 4px 才认定为拖动，避免误伤点击
+    private bool _dragMoved;               // 本次按下是否已经进入拖动
+    private int _dragStartY;
+
+    private void BeginDrag(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_gameMode) return;
+        if (e.ButtonState != System.Windows.Input.MouseButtonState.Pressed) return;
+        if (!Native.GetCursorPos(out var pt)) return;
+        _dragStartCursorX = pt.X;
+        _dragStartY = pt.Y;
+        _dragStartLeft = Left;
+        _pinnedBeforeDrag = _pinned;
+        _dragging = true;
+        _dragMoved = false;
+    }
+
+    private void MoveDrag(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        if (!Native.GetCursorPos(out var pt)) return;
+
+        int dx = pt.X - _dragStartCursorX;
+        int dy = pt.Y - _dragStartY;
+        if (!_dragMoved)
+        {
+            if (Math.Abs(dx) < DragThreshold) return;   // 纵向移动不算拖动（顶部吸附）
+            _dragMoved = true;
+            Shell.CaptureMouse();                        // 捕获到始终存在的 Shell，展开/收起切换也不丢鼠标
+            _pinned = true;                              // 拖动期间保持展开/不被自动收起
+        }
+
+        double maxLeft = Math.Max(0, SystemParameters.PrimaryScreenWidth - ExpW);
+        _dockLeft = Math.Clamp(_dragStartLeft + dx, 0, maxLeft);
+        Left = _dockLeft;   // 直接赋值 = 立即 SetWindowPos，无补间动画，完全跟手
+    }
+
+    private void EndDrag(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        if (_dragMoved)
+        {
+            Shell.ReleaseMouseCapture();
+            _pinned = _pinnedBeforeDrag;   // 恢复拖动前的固定状态
+            Store.Config.DockLeft = _dockLeft;
+            Store.Save();   // 位置落盘，重启后记住
+        }
+        _dragging = false;
+        _dragMoved = false;
+    }
+
+    private void CollapsedLayer_MouseLeftButtonDown(object s, System.Windows.Input.MouseButtonEventArgs e) => BeginDrag(s, e);
+    private void DragHandle_MouseLeftButtonDown(object s, System.Windows.Input.MouseButtonEventArgs e) => BeginDrag(s, e);
+    private void Shell_DragMove(object s, System.Windows.Input.MouseEventArgs e) => MoveDrag(s, e);
+    private void Shell_DragUp(object s, System.Windows.Input.MouseButtonEventArgs e) => EndDrag(s, e);
+
+    /// <summary>无论当前在哪个页签，一键把刘海放回屏幕顶部正中</summary>
+    private void BtnRecenter_Click(object sender, RoutedEventArgs e)
+    {
+        _dockLeft = Math.Round((SystemParameters.PrimaryScreenWidth - ExpW) / 2);
+        Left = _dockLeft;
+        Store.Config.DockLeft = _dockLeft;
+        Store.Save();
+        FlashHint("刘海已居中");
     }
 
     // ===================== 全屏游戏避让 =====================
@@ -345,6 +444,8 @@ public partial class NotchWindow : Window
             Shell.BeginAnimation(FrameworkElement.WidthProperty, null);
             Height = CollapsedHeight;
             Shell.Width = CollapsedWidth;
+            Top = 0;
+            Shell.CornerRadius = new CornerRadius(0, 0, CornerRadiusValue, CornerRadiusValue);
             ContentHost.Visibility = Visibility.Collapsed;
             ContentHost.IsHitTestVisible = false;
             CollapsedLayer.Visibility = Visibility.Collapsed;
@@ -403,6 +504,9 @@ public partial class NotchWindow : Window
         ContentHost.IsHitTestVisible = true;
         InstallMouseHook();
 
+        // 从灵动岛胶囊展开成贴顶面板：顶部两角变方（贴住屏幕上沿），整体上移贴顶
+        Shell.CornerRadius = new CornerRadius(0, 0, CornerRadiusValue, CornerRadiusValue);
+
         // 宽度先起、高度稍滞后 → 先横向拉开再落下，接近 macOS 刘海的手感
         StartShellAnim(ExpW, ExpH, ExpandWidthMs,
                        new QuadraticEase { EasingMode = EasingMode.EaseOut });
@@ -445,6 +549,7 @@ public partial class NotchWindow : Window
             ContentHost.IsHitTestVisible = false;
             PickerOverlay.Visibility = Visibility.Collapsed;
             SettingsOverlay.Visibility = Visibility.Collapsed;
+            Shell.CornerRadius = new CornerRadius(0, 0, CornerRadiusValue, CornerRadiusValue);   // 收回刘海圆角
         });
         AnimateCollapsedDots(1, 150, 130);
 
@@ -586,6 +691,7 @@ public partial class NotchWindow : Window
     private void GuardTick()
     {
         if (!_expanded) return;
+        if (_dragging) return;              // 拖动中不自动收起
         if (!IsPointerInside()) OnPointerLeft("guard");
     }
 
@@ -684,6 +790,7 @@ public partial class NotchWindow : Window
 
     private void OnPointerLeft(string reason)
     {
+        if (_dragging) return;              // 拖动中不自动收起
         if (!_expanded || _pinned) return;
         // 只挡展开瞬间那一两帧的边界抖动，过了就立刻响应"离开"
         if (Environment.TickCount64 - _expandTick < 60) return;
@@ -725,6 +832,7 @@ public partial class NotchWindow : Window
         {
             if (SettingsOverlay.Visibility == Visibility.Visible) { CloseSettings(); e.Handled = true; return; }
             if (PickerOverlay.Visibility == Visibility.Visible) { ClosePicker(); e.Handled = true; return; }
+            if (DueOverlay.Visibility == Visibility.Visible) { CloseDueCalendar(); e.Handled = true; return; }
             _pinned = false;
             Collapse("esc");
             e.Handled = true;
@@ -1100,6 +1208,7 @@ public partial class NotchWindow : Window
     {
         // 切页签时顺手关掉应用库浮层，避免"页签变了、内容还是应用库"
         if (PickerOverlay.Visibility == Visibility.Visible) PickerOverlay.Visibility = Visibility.Collapsed;
+        if (DueOverlay.Visibility == Visibility.Visible) CloseDueCalendar();
 
         _tab = index;
         PaneFav.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -1376,9 +1485,7 @@ public partial class NotchWindow : Window
     /// <summary>搜索框防抖：连续敲键盘时每 140ms 才过滤一次，别每个字符都重建列表</summary>
     private void PickerSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
-        PickerHint.Visibility = string.IsNullOrEmpty(PickerSearch.Text)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ShowHintIfIdle(PickerSearch, PickerHint);
 
         if (_pickerDebounce == null) return;
         _pickerDebounce.Stop();
@@ -1503,9 +1610,7 @@ public partial class NotchWindow : Window
 
     private void ClipSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
-        ClipSearchHint.Visibility = string.IsNullOrEmpty(ClipSearch.Text)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ShowHintIfIdle(ClipSearch, ClipSearchHint);
         RebuildClips();
     }
 
@@ -1676,7 +1781,11 @@ public partial class NotchWindow : Window
         var due = RoundUp(DateTime.Now.AddHours(1), 5);
         TodoDue.Text = due.ToString("MM-dd HH:mm");
         TodoBefore.Text = "15";
+        TodoDesc.Text = "";
+        TodoDesc.Visibility = Visibility.Collapsed;
+        UpdateDueChipText();
         UpdateTitleHint();
+        RefreshTodoFilter();
     }
 
     private static DateTime RoundUp(DateTime t, int minutes)
@@ -1684,11 +1793,6 @@ public partial class NotchWindow : Window
         var m = t.Minute;
         var add = (minutes - m % minutes) % minutes;
         return new DateTime(t.Year, t.Month, t.Day, t.Hour, t.Minute, 0).AddMinutes(add);
-    }
-
-    private void QuickBefore_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button b) TodoBefore.Text = b.Tag?.ToString() ?? "15";
     }
 
     private void AddTodo_Click(object sender, RoutedEventArgs e)
@@ -1706,16 +1810,170 @@ public partial class NotchWindow : Window
         if (!int.TryParse(TodoBefore.Text, out var before)) before = 15;
         before = Math.Clamp(before, 0, 60 * 24 * 30);
 
-        var item = new TodoItem { Title = title, Due = due, BeforeMinutes = before };
+        var item = new TodoItem
+        {
+            Title = title,
+            Description = TodoDesc.Text.Trim(),
+            Due = due,
+            BeforeMinutes = before
+        };
         _todos.Insert(0, item);
         Store.Config.Todos.Insert(0, item);
         Store.Save();
 
         TodoTitle.Text = "";
+        TodoDesc.Text = "";
+        TodoDesc.Visibility = Visibility.Collapsed;
+        // 添加后重置为下一小时，方便连续录入
+        ResetDueTo(RoundUp(DateTime.Now.AddHours(1), 5));
         UpdateTitleHint();
         _scheduler.Refresh(_todos);
         _scheduler.Sweep();
         UpdateTodoFooter();
+        RefreshTodoFilter();
+    }
+
+    // ===================== 截止时间日历浮层 =====================
+
+    private void TodoDueChip_Click(object sender, RoutedEventArgs e) => OpenDueCalendar();
+
+    private void OpenDueCalendar()
+    {
+        // 用当前输入卡里的时间初始化日历
+        var seed = TryParseDue(TodoDue.Text, out var d) ? d : DateTime.Now.AddHours(1);
+        _calYear = seed.Year;
+        _calMonth = seed.Month;
+        _calSelected = seed.Date;
+        DueTimeText.Text = seed.ToString("HH:mm");
+
+        // 同步"提醒"下拉
+        if (int.TryParse(TodoBefore.Text, out var before))
+        {
+            foreach (var it in DueReminder.Items.OfType<ComboBoxItem>())
+                if (it.Tag?.ToString() == before.ToString()) { DueReminder.SelectedItem = it; break; }
+        }
+
+        DueMonthText.Text = $"{_calYear}年{_calMonth}月";
+        RenderCalendar();
+        DueOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void CloseDueCalendar() => DueOverlay.Visibility = Visibility.Collapsed;
+
+    private void RenderCalendar()
+    {
+        var items = new List<CalDay>();
+        var first = new DateTime(_calYear, _calMonth, 1);
+        int offset = (int)first.DayOfWeek;              // 周日为 0
+        var gridStart = first.AddDays(-offset);
+        var today = DateTime.Today;
+
+        int daysInMonth = DateTime.DaysInMonth(_calYear, _calMonth);
+        int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);   // 实际周数（多为 5，少数 6）
+        int cells = Math.Max(5, weeks) * 7;
+        for (int i = 0; i < cells; i++)
+        {
+            var date = gridStart.AddDays(i);
+            items.Add(new CalDay
+            {
+                Date = date,
+                Label = date.Day.ToString(),
+                InMonth = date.Month == _calMonth && date.Year == _calYear,
+                IsToday = date.Date == today,
+                IsSelected = date.Date == _calSelected.Date
+            });
+        }
+        DueDays.ItemsSource = items;
+    }
+
+    private void DuePrevMonth_Click(object sender, RoutedEventArgs e) => ShiftMonth(-1);
+    private void DueNextMonth_Click(object sender, RoutedEventArgs e) => ShiftMonth(1);
+
+    private void ShiftMonth(int delta)
+    {
+        var m = _calMonth + delta;
+        var y = _calYear;
+        if (m < 1) { m = 12; y--; }
+        else if (m > 12) { m = 1; y++; }
+        _calYear = y;
+        _calMonth = m;
+        DueMonthText.Text = $"{_calYear}年{_calMonth}月";
+        RenderCalendar();
+    }
+
+    private void DueDay_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button b && b.Tag is DateTime dt)
+        {
+            _calSelected = dt.Date;
+            RenderCalendar();
+        }
+    }
+
+    private void DueConfirm_Click(object sender, RoutedEventArgs e)
+    {
+        string time = DueTimeText.Text.Trim();
+        if (!TimeSpan.TryParse(time, out var ts)) ts = new TimeSpan(18, 0, 0);
+        var due = _calSelected.Date.Add(ts);
+
+        // 若选的是过去的时刻，顺延到明天同一时刻（避免建出来就是过期提醒）
+        if (due <= DateTime.Now) due = due.AddDays(1);
+
+        ResetDueTo(due);
+        var sel = DueReminder.SelectedItem as ComboBoxItem;
+        TodoBefore.Text = sel?.Tag?.ToString() ?? "15";
+        CloseDueCalendar();
+        FlashFooter($"截止时间已设为 {due:MM-dd HH:mm}");
+    }
+
+    private void ResetDueTo(DateTime due)
+    {
+        TodoDue.Text = due.ToString("MM-dd HH:mm");
+        UpdateDueChipText();
+    }
+
+    private void UpdateDueChipText()
+    {
+        if (TryParseDue(TodoDue.Text, out var due))
+            TodoDueChipText.Text = due.ToString("MM-dd HH:mm");
+        else
+            TodoDueChipText.Text = "截止时间";
+    }
+
+    private void DueOverlayBackdrop_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => CloseDueCalendar();
+    private void DueCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => e.Handled = true;
+
+    // ===================== 描述 / 显示已完成 =====================
+
+    private void TodoDescChip_Click(object sender, RoutedEventArgs e)
+    {
+        TodoDesc.Visibility = TodoDesc.Visibility == Visibility.Visible
+            ? Visibility.Collapsed : Visibility.Visible;
+        if (TodoDesc.Visibility == Visibility.Visible) TodoDesc.Focus();
+    }
+
+    private void TodoTitle_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            AddTodo_Click(sender, e);
+        }
+    }
+
+    private void TodoShowDone_Click(object sender, RoutedEventArgs e)
+    {
+        _showDone = !_showDone;
+        TodoShowDone.Content = _showDone ? "▾ 隐藏已完成" : "▸ 显示已完成";
+        RefreshTodoFilter();
+    }
+
+    private void RefreshTodoFilter()
+    {
+        var view = CollectionViewSource.GetDefaultView(TodoList.ItemsSource);
+        if (view == null) return;
+        view.Filter = _showDone ? null : new Predicate<object>(o => o is TodoItem t && !t.Done);
+        view.Refresh();
     }
 
     private static bool TryParseDue(string text, out DateTime due)
@@ -1749,6 +2007,7 @@ public partial class NotchWindow : Window
         Store.Save();
         _scheduler.Refresh(_todos);
         UpdateTodoFooter();
+        RefreshTodoFilter();   // 隐藏已完成时，勾上后立刻从列表消失
     }
 
     private void TodoDelete_Click(object sender, RoutedEventArgs e)
@@ -1829,12 +2088,38 @@ public partial class NotchWindow : Window
         TodoFooter.Text = pending == 0
             ? "没有进行中的待办"
             : next == null ? $"{pending} 项待办" : $"{pending} 项待办 · 最近一条 {next.FireAt:HH:mm} 提醒";
-        TodoEmpty.Visibility = _todos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        // 空状态按"当前过滤后可见条数"判断：隐藏已完成时若只剩已完成，也应显示空态
+        int visible = _showDone ? _todos.Count : _todos.Count(t => !t.Done);
+        TodoEmpty.Visibility = visible == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void UpdateTitleHint()
+    private void UpdateTitleHint() => ShowHintIfIdle(TodoTitle, TodoTitleHint);
+
+    /// <summary>
+    /// placeholder 显隐：只在「文本为空 且 未聚焦」时显示。
+    /// 聚焦时立即隐藏——否则光标就贴在占位文字第一个字上，看着像"光标前多了个字"。
+    /// </summary>
+    private static void ShowHintIfIdle(TextBox box, TextBlock hint)
     {
-        TodoTitleHint.Visibility = string.IsNullOrEmpty(TodoTitle.Text) ? Visibility.Visible : Visibility.Collapsed;
+        hint.Visibility = string.IsNullOrEmpty(box.Text) && !box.IsKeyboardFocused
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void SearchBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        // 聚焦时直接隐藏，不依赖 IsKeyboardFocused 在事件中的时序
+        if (sender == ClipSearch) ClipSearchHint.Visibility = Visibility.Collapsed;
+        else if (sender == PickerSearch) PickerHint.Visibility = Visibility.Collapsed;
+        else if (sender == TodoTitle) TodoTitleHint.Visibility = Visibility.Collapsed;
+    }
+    private void SearchBox_LostFocus(object sender, RoutedEventArgs e) => RefreshAllHints();
+
+    private void RefreshAllHints()
+    {
+        ShowHintIfIdle(ClipSearch, ClipSearchHint);
+        ShowHintIfIdle(PickerSearch, PickerHint);
+        ShowHintIfIdle(TodoTitle, TodoTitleHint);
     }
 
     // ===================== 菜单 =====================

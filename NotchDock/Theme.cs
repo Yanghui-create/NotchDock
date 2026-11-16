@@ -65,8 +65,8 @@ public static class Theme
         Set(r, "CheckBorderBrush", 0x4DFFFFFF);
         Set(r, "ScrollThumbBrush", 0x38FFFFFF);
         Set(r, "TickBrush", 0xFF0B1220);
-        Set(r, "DotBrush", 0xFF23232B);
-        Set(r, "DotSmallBrush", 0xFF3B3B46);
+        Set(r, "DotBrush", 0xFFEDEDF2);      // 黑色主题：白点
+        Set(r, "DotSmallBrush", 0xFFC0C0C8);
         Set(r, "BadgeTextBrush", 0xFFFFFFFF);
         Set(r, "OverlayBrush", 0xFF08080B);
 
@@ -118,8 +118,8 @@ public static class Theme
         Set(r, "CheckBorderBrush", 0x33000000);
         Set(r, "ScrollThumbBrush", 0x29000000);
         Set(r, "TickBrush", 0xFFFFFFFF);
-        Set(r, "DotBrush", 0xFFD2D4DA);
-        Set(r, "DotSmallBrush", 0xFFAFB2BA);
+        Set(r, "DotBrush", 0xFF1C1C1E);      // 白色主题：黑点
+        Set(r, "DotSmallBrush", 0xFF3A3A3C);
         Set(r, "BadgeTextBrush", 0xFFFFFFFF);
         Set(r, "OverlayBrush", 0xFFFFFFFF);
 
@@ -167,8 +167,8 @@ public static class Theme
         Set(r, "CheckBorderBrush", 0x44000000);
         Set(r, "ScrollThumbBrush", 0x3D000000);
         Set(r, "TickBrush", 0xFFFFFFFF);
-        Set(r, "DotBrush", 0xFF3A3E48);
-        Set(r, "DotSmallBrush", 0xFF5A5F6A);
+        Set(r, "DotBrush", 0xFF1C2026);      // 液态玻璃：黑点
+        Set(r, "DotSmallBrush", 0xFF3A3E44);
         Set(r, "BadgeTextBrush", 0xFFFFFFFF);
         Set(r, "OverlayBrush", 0xF7F5F8FC);
 

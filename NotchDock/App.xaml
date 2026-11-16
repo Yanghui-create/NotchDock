@@ -22,8 +22,8 @@
       <SolidColorBrush x:Key="CheckBorderBrush" Color="#4DFFFFFF" />
       <SolidColorBrush x:Key="ScrollThumbBrush" Color="#38FFFFFF" />
       <SolidColorBrush x:Key="TickBrush" Color="#FF0B1220" />
-      <SolidColorBrush x:Key="DotBrush" Color="#FF23232B" />
-      <SolidColorBrush x:Key="DotSmallBrush" Color="#FF3B3B46" />
+      <SolidColorBrush x:Key="DotBrush" Color="#FFEDEDF2" />
+      <SolidColorBrush x:Key="DotSmallBrush" Color="#FFC0C0C8" />
       <SolidColorBrush x:Key="BadgeTextBrush" Color="#FFFFFFFF" />
       <SolidColorBrush x:Key="OverlayBrush" Color="#FF08080B" />
 

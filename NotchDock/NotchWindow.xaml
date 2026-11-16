@@ -24,7 +24,8 @@
             HorizontalAlignment="Center" VerticalAlignment="Stretch"
             Background="{DynamicResource ShellBgBrush}"
             CornerRadius="0,0,24,24" BorderThickness="0,0,1,1"
-            BorderBrush="{DynamicResource StrokeBrush}" ClipToBounds="True">
+            BorderBrush="{DynamicResource StrokeBrush}" ClipToBounds="True"
+            MouseMove="Shell_DragMove" MouseLeftButtonUp="Shell_DragUp">
       <Grid>
 
         <!-- ===== 液态玻璃层（只有 Glass 主题才显示）=====
@@ -83,14 +84,12 @@
 
         <Grid>
 
-        <!-- ================= 收起态 ================= -->
+        <!-- ================= 收起态：MacBook 刘海（可按住拖动） ================= -->
         <Grid x:Name="CollapsedLayer" Width="214" Height="30"
-              HorizontalAlignment="Center" VerticalAlignment="Top">
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
-                      Margin="0,5,0,0">
-            <Ellipse Width="7" Height="7" Fill="{DynamicResource DotBrush}" />
-            <Ellipse Width="3" Height="3" Fill="{DynamicResource DotSmallBrush}" />
-          </StackPanel>
+              HorizontalAlignment="Center" VerticalAlignment="Top"
+              Cursor="Hand" MouseLeftButtonDown="CollapsedLayer_MouseLeftButtonDown">
+          <Ellipse Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Fill="{DynamicResource DotBrush}" />
         </Grid>
 
         <!-- ================= 展开态 =================
@@ -108,8 +107,9 @@
               <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-          <!-- 顶部页签栏 -->
-          <Grid Grid.Row="0" Margin="16,0,12,0">
+          <!-- 顶部页签栏（空白处可按住拖动整个刘海） -->
+          <Grid x:Name="DragHandle" Grid.Row="0" Margin="16,0,12,0"
+                MouseLeftButtonDown="DragHandle_MouseLeftButtonDown" Background="Transparent">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
               <Button x:Name="TabFav" Style="{StaticResource PillStyle}" Content="速览" Tag="0"
                       Click="Tab_Click" Margin="0,0,2,0" />
@@ -119,86 +119,15 @@
                       Click="Tab_Click" />
             </StackPanel>
 
-            <!-- 唯一设置入口：iOS「设置」齿轮（原来 ⚙ + ⋯ 两个入口容易让人犯迷糊，
-                 现在合成一个；⋯ 菜单里的功能全部搬进了设置面板，托盘菜单不受影响） -->
+            <!-- 右上角：居中显示（让刘海回到屏幕正中）/ 设置（文字按钮）/ 全部清除（仅待办页） -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
               <Button x:Name="BtnAction" Style="{StaticResource GhostStyle}" Content="全部清除"
                       Click="BtnAction_Click" Margin="0,0,2,0" />
-              <Button x:Name="BtnSettings" Style="{StaticResource GhostStyle}" Click="OpenSettings_Click"
-                      Padding="9,4" ToolTip="设置">
-                <Button.Content>
-                  <Viewbox Width="15" Height="15" IsHitTestVisible="False">
-                    <Grid Width="24" Height="24">
-                      <Ellipse Width="14.4" Height="14.4"
-                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                               StrokeThickness="2.5" />
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="0" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="40" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="80" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="120" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="160" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="200" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="240" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="280" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                      <Rectangle Width="3.4" Height="6.4" RadiusX="1.7" RadiusY="1.7"
-                                  VerticalAlignment="Top" Margin="10.3,0.6,10.3,0"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                        <Rectangle.RenderTransform>
-                          <RotateTransform Angle="320" CenterX="12" CenterY="12" />
-                        </Rectangle.RenderTransform>
-                      </Rectangle>
-                    </Grid>
-                  </Viewbox>
-                </Button.Content>
-              </Button>
+              <Button x:Name="BtnRecenter" Style="{StaticResource GhostStyle}" Content="居中显示"
+                      Click="BtnRecenter_Click" Margin="0,0,2,0" Padding="9,4" FontSize="12"
+                      ToolTip="让刘海回到屏幕顶部正中" />
+              <Button x:Name="BtnSettings" Style="{StaticResource GhostStyle}" Content="设置"
+                      Click="OpenSettings_Click" Padding="9,4" FontSize="12" ToolTip="设置" />
             </StackPanel>
           </Grid>
 
@@ -323,7 +252,8 @@
 
                 <Grid Grid.Column="0">
                   <TextBox x:Name="ClipSearch" Style="{StaticResource DarkInput}" Height="34"
-                           TextChanged="ClipSearch_TextChanged" />
+                           TextChanged="ClipSearch_TextChanged"
+                           GotFocus="SearchBox_GotFocus" LostFocus="SearchBox_LostFocus" />
                   <TextBlock x:Name="ClipSearchHint" Text="搜索复制过的内容…" FontSize="12.5"
                              Foreground="{DynamicResource FgMuteBrush}" Margin="12,0,0,0"
                              VerticalAlignment="Center" IsHitTestVisible="False" />
@@ -464,7 +394,7 @@
               </Border>
             </Grid>
 
-            <!-- ===== 页3：待办 ===== -->
+            <!-- ===== 页3：待办（企业微信风格） ===== -->
             <Grid x:Name="PaneTodo" Visibility="Collapsed">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -472,54 +402,77 @@
                 <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
 
-              <Border Grid.Row="0" Margin="14,0,14,8" Padding="12,10" CornerRadius="12"
-                      Background="{DynamicResource CardBrush}">
+              <!-- 输入卡：大输入框 + 发送按钮，下面一行功能键 -->
+              <Border Grid.Row="0" Margin="14,0,14,8" Padding="12,10" CornerRadius="14"
+                      Background="{DynamicResource CardBrush}" BorderThickness="1"
+                      BorderBrush="{DynamicResource StrokeBrush}">
                 <StackPanel>
                   <Grid>
-                    <TextBox x:Name="TodoTitle" Style="{StaticResource DarkInput}" Height="34" />
-                    <TextBlock x:Name="TodoTitleHint" Text="要做什么？例如：给王总回电话" FontSize="12.5"
-                               Foreground="{DynamicResource FgMuteBrush}" Margin="12,0,0,0"
-                               VerticalAlignment="Center" IsHitTestVisible="False" />
-                  </Grid>
-                  <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="Auto" />
-                      <ColumnDefinition Width="Auto" />
-                      <ColumnDefinition Width="Auto" />
-                      <ColumnDefinition Width="Auto" />
-                      <ColumnDefinition Width="Auto" />
                       <ColumnDefinition Width="*" />
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="截止" FontSize="11.5" VerticalAlignment="Center"
-                               Foreground="{DynamicResource FgMuteBrush}" Margin="0,0,6,0" />
-                    <TextBox x:Name="TodoDue" Grid.Column="1" Style="{StaticResource DarkInput}"
-                             Width="122" Height="30" FontSize="12" Padding="9,0" />
-                    <TextBlock Grid.Column="2" Text="提前" FontSize="11.5" VerticalAlignment="Center"
-                               Foreground="{DynamicResource FgMuteBrush}" Margin="10,0,6,0" />
-                    <TextBox x:Name="TodoBefore" Grid.Column="3" Style="{StaticResource DarkInput}"
-                             Width="52" Height="30" FontSize="12" Padding="9,0" Text="15" />
-                    <TextBlock Grid.Column="4" Text="分钟" FontSize="11.5" VerticalAlignment="Center"
-                               Foreground="{DynamicResource FgMuteBrush}" Margin="6,0,0,0" />
-                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center"
-                                HorizontalAlignment="Right" Margin="8,0,8,0">
-                      <Button Style="{StaticResource GhostStyle}" Content="30分" Tag="30" Click="QuickBefore_Click" Margin="0,0,2,0" />
-                      <Button Style="{StaticResource GhostStyle}" Content="1小时" Tag="60" Click="QuickBefore_Click" Margin="0,0,2,0" />
-                      <Button Style="{StaticResource GhostStyle}" Content="1天" Tag="1440" Click="QuickBefore_Click" />
-                    </StackPanel>
-                    <Button Grid.Column="6" Content="添加" Click="AddTodo_Click"
-                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource BadgeTextBrush}"
-                            FontSize="12.5" FontWeight="SemiBold" Padding="14,6" Cursor="Hand" BorderThickness="0">
+                    <Grid Grid.Column="0">
+                      <TextBox x:Name="TodoTitle" Style="{StaticResource DarkInput}" Height="40"
+                               FontSize="13.5" Padding="13,0" AcceptsReturn="False" KeyDown="TodoTitle_KeyDown"
+                               GotFocus="SearchBox_GotFocus" LostFocus="SearchBox_LostFocus" />
+                      <TextBlock x:Name="TodoTitleHint" Text="写下你的待办事项..." FontSize="13"
+                                 Foreground="{DynamicResource FgMuteBrush}" Margin="14,0,0,0"
+                                 VerticalAlignment="Center" IsHitTestVisible="False" />
+                    </Grid>
+                    <!-- 蓝色发送按钮（纸飞机） -->
+                    <Button Grid.Column="1" Click="AddTodo_Click" Width="40" Height="40" Margin="8,0,0,0"
+                            Cursor="Hand" BorderThickness="0" ToolTip="添加待办">
                       <Button.Template>
                         <ControlTemplate TargetType="Button">
-                          <Border Background="{TemplateBinding Background}" CornerRadius="9"
-                                  Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          <Border x:Name="bd" Background="{DynamicResource AccentBrush}" CornerRadius="11">
+                            <Path HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Data="M3,11 L20,4 L13,20 L11,13 Z M11,13 L20,4"
+                                  Stroke="{DynamicResource BadgeTextBrush}" StrokeThickness="1.5"
+                                  StrokeLineJoin="Round" Stretch="Uniform" Width="17" Height="17"
+                                  Margin="0,0,0,0" />
                           </Border>
+                          <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                              <Setter TargetName="bd" Property="Opacity" Value="0.85" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                              <Setter TargetName="bd" Property="Opacity" Value="0.7" />
+                            </Trigger>
+                          </ControlTemplate.Triggers>
                         </ControlTemplate>
                       </Button.Template>
                     </Button>
                   </Grid>
+
+                  <!-- 功能键行：截止时间 / 描述 -->
+                  <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                    <Button x:Name="TodoDueChip" Style="{StaticResource GhostStyle}" Click="TodoDueChip_Click"
+                            Padding="9,5" Margin="0,0,6,0" FontSize="11.5">
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="◷" FontSize="13" Margin="0,-1,5,0"
+                                   Foreground="{DynamicResource AccentBrush}" />
+                        <TextBlock x:Name="TodoDueChipText" Text="截止时间" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                    <Button x:Name="TodoDescChip" Style="{StaticResource GhostStyle}" Click="TodoDescChip_Click"
+                            Padding="9,5" FontSize="11.5">
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="≡" FontSize="14" Margin="0,-2,5,0"
+                                   Foreground="{DynamicResource AccentBrush}" />
+                        <TextBlock Text="描述" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                  </StackPanel>
+
+                  <!-- 描述输入框（点「描述」展开） -->
+                  <TextBox x:Name="TodoDesc" Style="{StaticResource DarkInput}" Visibility="Collapsed"
+                           Height="58" Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap"
+                           AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                           Padding="12,8" />
+                  <!-- 隐藏的 backing 字段：实际截止时间与提醒提前量 -->
+                  <TextBox x:Name="TodoDue" Visibility="Collapsed" />
+                  <TextBox x:Name="TodoBefore" Visibility="Collapsed" Text="15" />
                 </StackPanel>
               </Border>
 
@@ -534,11 +487,10 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                           </Grid.ColumnDefinitions>
-                          <CheckBox Grid.Column="0" Style="{StaticResource DarkCheck}" VerticalAlignment="Center"
-                                    IsChecked="{Binding Done, Mode=TwoWay}" Click="TodoCheck_Click" />
-                          <StackPanel Grid.Column="1" Margin="11,0,8,0" VerticalAlignment="Center">
+                          <CheckBox Grid.Column="0" Style="{StaticResource DarkCheck}" VerticalAlignment="Top"
+                                    Margin="0,1,0,0" IsChecked="{Binding Done, Mode=TwoWay}" Click="TodoCheck_Click" />
+                          <StackPanel Grid.Column="1" Margin="11,0,8,0" VerticalAlignment="Top">
                             <TextBlock Text="{Binding Title}" FontSize="12.5" TextWrapping="Wrap">
                               <TextBlock.Style>
                                 <Style TargetType="TextBlock">
@@ -552,18 +504,31 @@
                                 </Style>
                               </TextBlock.Style>
                             </TextBlock>
-                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                              <TextBlock Text="{Binding DueText}" FontSize="11" Foreground="{DynamicResource FgDimBrush}" />
+                            <TextBlock Text="{Binding Description}" FontSize="11.5" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource FgDimBrush}" Margin="0,3,0,0">
+                              <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                  <Setter Property="Visibility" Value="Collapsed" />
+                                  <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasDescription}" Value="True">
+                                      <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                  </Style.Triggers>
+                                </Style>
+                              </TextBlock.Style>
+                            </TextBlock>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                              <TextBlock Text="{Binding DueText}" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
                               <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource FgMuteBrush}" />
                               <TextBlock Text="{Binding BeforeText}" FontSize="11" Foreground="{DynamicResource FgDimBrush}" />
                               <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource FgMuteBrush}" />
                               <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource FgMuteBrush}" />
                             </StackPanel>
                           </StackPanel>
-                          <Button Grid.Column="2" Style="{StaticResource GhostStyle}" Content="稍后"
-                                  Click="TodoSnooze_Click" Margin="0,0,2,0" VerticalAlignment="Center" />
-                          <Button Grid.Column="3" Style="{StaticResource GhostStyle}" Content="✕"
-                                  Click="TodoDelete_Click" VerticalAlignment="Center" />
+                          <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                            <Button Style="{StaticResource GhostStyle}" Content="✕" FontSize="11"
+                                    Padding="6,3" Click="TodoDelete_Click" />
+                          </StackPanel>
                         </Grid>
                       </Border>
                     </DataTemplate>
@@ -571,12 +536,35 @@
                 </ItemsControl>
               </ScrollViewer>
 
-              <TextBlock x:Name="TodoEmpty" Grid.Row="1" Text="今天没有待办" FontSize="12"
-                         Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center"
-                         VerticalAlignment="Center" />
+              <!-- 空状态：插画 + 文案 -->
+              <StackPanel x:Name="TodoEmpty" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center"
+                          IsHitTestVisible="False">
+                <Border Width="72" Height="72" CornerRadius="20" HorizontalAlignment="Center"
+                        Background="{DynamicResource AccentSoftBrush}">
+                  <Grid>
+                    <Path Width="34" Height="34" Stretch="Uniform" Stroke="{DynamicResource AccentBrush}"
+                          StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Data="M5,2 L19,2 A2,2 0 0 1 21,4 L21,22 A2,2 0 0 1 19,24 L5,24 A2,2 0 0 1 3,22 L3,4 A2,2 0 0 1 5,2 Z M8,9 L16,9 M8,13 L16,13 M8,17 L13,17" />
+                    <Ellipse Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                             Margin="0,0,-3,-3" Fill="{DynamicResource AccentBrush}" />
+                    <Path Width="11" Height="11" Stretch="Uniform" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                          Margin="0,0,1,4" Stroke="{DynamicResource BadgeTextBrush}" StrokeThickness="2.2"
+                          StrokeLineJoin="Round" Data="M1,5 L4.5,8.5 L11,1.5" />
+                  </Grid>
+                </Border>
+                <TextBlock Text="随时记录待办，有序处理工作" FontSize="13" HorizontalAlignment="Center"
+                           Margin="0,14,0,0" Foreground="{DynamicResource FgBrush}" />
+                <TextBlock Text="写下一件事，到点我会提醒你" FontSize="11.5" HorizontalAlignment="Center"
+                           Margin="0,5,0,0" Foreground="{DynamicResource FgMuteBrush}" />
+              </StackPanel>
 
-              <TextBlock Grid.Row="2" x:Name="TodoFooter" Text="" FontSize="11"
-                         Foreground="{DynamicResource FgMuteBrush}" Margin="16,0,16,10" />
+              <!-- 底部：状态 + 显示已完成事项 -->
+              <Grid Grid.Row="2" Margin="16,0,16,10">
+                <TextBlock x:Name="TodoFooter" Text="" FontSize="11" VerticalAlignment="Center"
+                           Foreground="{DynamicResource FgMuteBrush}" />
+                <Button x:Name="TodoShowDone" Style="{StaticResource GhostStyle}" Click="TodoShowDone_Click"
+                        HorizontalAlignment="Right" Padding="8,4" FontSize="11" Content="▸ 显示已完成" />
+              </Grid>
             </Grid>
 
             <!-- ===== 应用库浮层 ===== -->
@@ -596,7 +584,8 @@
                 </Grid>
                 <Grid Grid.Row="1" Margin="0,10,0,10">
                   <TextBox x:Name="PickerSearch" Style="{StaticResource DarkInput}" Height="32"
-                           TextChanged="PickerSearch_TextChanged" />
+                           TextChanged="PickerSearch_TextChanged"
+                           GotFocus="SearchBox_GotFocus" LostFocus="SearchBox_LostFocus" />
                   <TextBlock x:Name="PickerHint" Text="搜索已安装应用…" FontSize="12.5"
                              Foreground="{DynamicResource FgMuteBrush}" Margin="12,0,0,0"
                              VerticalAlignment="Center" IsHitTestVisible="False" />
@@ -798,6 +787,129 @@
                   </StackPanel>
                 </ScrollViewer>
               </Grid>
+            </Border>
+
+            <!-- ===== 截止时间日历浮层（企业微信风格） ===== -->
+              <Border x:Name="DueOverlay" Visibility="Collapsed" Background="{DynamicResource OverlayBrush}"
+                    CornerRadius="0,0,24,24" MouseLeftButtonDown="DueOverlayBackdrop_Click">
+              <Border Width="288" VerticalAlignment="Center" HorizontalAlignment="Center"
+                      CornerRadius="14" Padding="13,11" Background="{DynamicResource CardBrush}"
+                      BorderThickness="1" BorderBrush="{DynamicResource StrokeBrush}"
+                      MouseLeftButtonDown="DueCard_Click">
+                <StackPanel>
+                  <!-- 月份 + 前后切换 -->
+                  <Grid Margin="0,0,0,7">
+                    <TextBlock x:Name="DueMonthText" Text="2026年11月" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource FgBrush}" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                      <Button Style="{StaticResource GhostStyle}" Content="‹" FontSize="15" Padding="0"
+                              Width="24" Height="22" Click="DuePrevMonth_Click" />
+                      <Button Style="{StaticResource GhostStyle}" Content="›" FontSize="15" Padding="0"
+                              Width="24" Height="22" Margin="3,0,0,0" Click="DueNextMonth_Click" />
+                    </StackPanel>
+                  </Grid>
+
+                  <!-- 星期表头 -->
+                  <UniformGrid Columns="7" Margin="0,0,0,2">
+                    <TextBlock Text="日" FontSize="10.5" Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="一" FontSize="10.5" Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="二" FontSize="10.5" Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="三" FontSize="10.5" Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="四" FontSize="10.5" Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="五" FontSize="10.5" Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="六" FontSize="10.5" Foreground="{DynamicResource FgMuteBrush}" HorizontalAlignment="Center" />
+                  </UniformGrid>
+
+                  <!-- 日期网格：由代码动态填充 -->
+                  <ItemsControl x:Name="DueDays">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <UniformGrid Columns="7" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Button Click="DueDay_Click" Cursor="Hand" BorderThickness="0" Background="Transparent"
+                                Tag="{Binding Date}" Padding="0" Margin="0.5"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                          <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                              <Border x:Name="bd" Width="33" Height="27" CornerRadius="8"
+                                      Background="{TemplateBinding Background}">
+                                <TextBlock x:Name="txt" Text="{Binding Label}" FontSize="11.5"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource FgBrush}" />
+                              </Border>
+                              <ControlTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                  <Setter TargetName="bd" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                  <Setter TargetName="txt" Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                  <Setter TargetName="bd" Property="Background" Value="{DynamicResource AccentBrush}" />
+                                  <Setter TargetName="txt" Property="Foreground" Value="{DynamicResource BadgeTextBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding InMonth}" Value="False">
+                                  <Setter TargetName="txt" Property="Foreground" Value="{DynamicResource FgMuteBrush}" />
+                                  <Setter TargetName="bd" Property="Opacity" Value="0.45" />
+                                </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                  <Setter TargetName="bd" Property="Opacity" Value="0.8" />
+                                </Trigger>
+                              </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                          </Button.Template>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+
+                  <!-- 时间 -->
+                  <Grid Margin="0,8,0,0">
+                    <TextBlock Text="时间" FontSize="11.5" Foreground="{DynamicResource FgDimBrush}"
+                               VerticalAlignment="Center" Width="38"
+                               HorizontalAlignment="Left" />
+                    <TextBox x:Name="DueTimeText" Style="{StaticResource DarkInput}" Height="29"
+                             FontSize="11.5" Text="18:00" Margin="38,0,0,0" />
+                  </Grid>
+
+                  <!-- 提醒 -->
+                  <Grid Margin="0,7,0,0">
+                    <TextBlock Text="提醒" FontSize="11.5" Foreground="{DynamicResource FgDimBrush}"
+                               VerticalAlignment="Center" Width="38" />
+                    <ComboBox x:Name="DueReminder" Height="29" Margin="38,0,0,0" FontSize="11.5"
+                              Background="{DynamicResource InputBrush}" Foreground="{DynamicResource FgBrush}"
+                              BorderThickness="0" SelectedIndex="2">
+                      <ComboBoxItem Content="准时提醒" Tag="0" />
+                      <ComboBoxItem Content="提前 5 分钟" Tag="5" />
+                      <ComboBoxItem Content="提前 15 分钟" Tag="15" />
+                      <ComboBoxItem Content="提前 30 分钟" Tag="30" />
+                      <ComboBoxItem Content="提前 1 小时" Tag="60" />
+                      <ComboBoxItem Content="提前 2 小时" Tag="120" />
+                      <ComboBoxItem Content="提前 3 小时" Tag="180" />
+                      <ComboBoxItem Content="提前 1 天" Tag="1440" />
+                    </ComboBox>
+                  </Grid>
+
+                  <!-- 确定 -->
+                  <Button Content="确定" Click="DueConfirm_Click" Height="31" Margin="0,10,0,0"
+                          Cursor="Hand" BorderThickness="0" FontSize="12" FontWeight="SemiBold"
+                          Foreground="{DynamicResource BadgeTextBrush}" Background="{DynamicResource AccentBrush}">
+                    <Button.Template>
+                      <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="10">
+                          <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                          <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.85" />
+                          </Trigger>
+                        </ControlTemplate.Triggers>
+                      </ControlTemplate>
+                    </Button.Template>
+                  </Button>
+                </StackPanel>
+              </Border>
             </Border>
 
           </Grid>
