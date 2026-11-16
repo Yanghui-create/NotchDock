@@ -49,6 +49,12 @@ public partial class NotchWindow : Window
     private int _animToken;
     private long _expandTick;
 
+    /// <summary>前台是"游戏界面"（全屏、无边框、非浏览器）时为真。
+    /// 此时刘海整体隐藏，不置顶、不接收点击、不响应任何展开入口，避免把全屏游戏挤回桌面。</summary>
+    private bool _gameMode;
+    private readonly FullscreenDetector _fullscreenDetector = new();
+    private DispatcherTimer _gameWatch = null!;
+
     /// <summary>
     /// 剪贴板列表是否需要重建。展开/切到剪贴板页时，没有新内容就原样显示——
     /// 之前每次展开都无条件 RebuildClips()，几百条记录会整表重建并实例化几百张卡片，
@@ -159,9 +165,11 @@ public partial class NotchWindow : Window
 
         // 置顶权重申：别的置顶窗（全屏游戏、某些播放器、悬浮工具条）会压过来，
         // 每 3 秒用 SWP_NOACTIVATE 把刘海重新抬到最上层，不抢焦点、不打扰前台程序。
+        // 但游戏模式下绝不再抬——那会把刘海盖到全屏游戏上，正是"点一下跳回桌面"的根因。
         var topmost = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         topmost.Tick += (_, _) =>
         {
+            if (_gameMode) return;
             try
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -172,6 +180,15 @@ public partial class NotchWindow : Window
             catch { }
         };
         topmost.Start();
+
+        // 全屏游戏看门狗：每 500ms 检测一次前台，进入/退出游戏模式时隐藏/恢复刘海。
+        _gameWatch = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _gameWatch.Tick += (_, _) => CheckGameMode();
+        _gameWatch.Start();
+        CheckGameMode();   // 启动瞬间就判一次（比如已在游戏里启动的情况）
 
         // 悬停即展开（零延迟）、离开即收起
         Shell.MouseEnter += (_, _) =>
@@ -304,10 +321,74 @@ public partial class NotchWindow : Window
         }
     }
 
+    // ===================== 全屏游戏避让 =====================
+
+    /// <summary>
+    /// 前台是游戏界面时，把刘海整体隐藏：不渲染、不接收鼠标、不进置顶层。
+    /// 这样点击屏幕顶部那块区域会直接落到游戏窗口上，不会触发刘海展开、
+    /// 更不会把全屏游戏挤回桌面。浏览器（含页游、F11 全屏）不计入，刘海照常工作。
+    /// </summary>
+    private void CheckGameMode()
+    {
+        bool isGame = _fullscreenDetector.IsFullscreenGame();
+        if (isGame == _gameMode) return;   // 状态没变，零开销
+
+        _gameMode = isGame;
+        if (isGame)
+        {
+            Log.Write("game-mode: 检测到全屏游戏 → 刘海隐藏");
+            // 先硬收起，再整体隐藏，避免残留的动画回调在隐藏态改 UI
+            if (_expanded) Collapse("game-mode");
+            UninstallMouseHook();
+            StopShellAnim(false);
+            BeginAnimation(FrameworkElement.HeightProperty, null);
+            Shell.BeginAnimation(FrameworkElement.WidthProperty, null);
+            Height = CollapsedHeight;
+            Shell.Width = CollapsedWidth;
+            ContentHost.Visibility = Visibility.Collapsed;
+            ContentHost.IsHitTestVisible = false;
+            CollapsedLayer.Visibility = Visibility.Collapsed;
+
+            // 主动降到普通层级，彻底退出游戏的置顶竞争
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                    Native.SetWindowPos(hwnd, Native.HWND_NOTOPMOST, 0, 0, 0, 0,
+                        Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            }
+            catch { }
+
+            Hide();   // 关键：窗口不可见 + 不接收任何鼠标事件
+        }
+        else
+        {
+            Log.Write("game-mode: 游戏已退出 → 刘海恢复");
+            _alertMode = false;
+            SetupWindow();
+            CollapsedLayer.Visibility = Visibility.Visible;
+            Show();
+            // 恢复置顶（等窗口真正显示后再抬）
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                    if (hwnd != IntPtr.Zero)
+                        Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0,
+                            Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+                }
+                catch { }
+            }), DispatcherPriority.Loaded);
+        }
+    }
+
     // ===================== 展开 / 收起 =====================
 
     private void Expand(bool byUser, string reason = "")
     {
+        // 总闸门：游戏模式下任何入口（悬停/热键/托盘/提醒）都不许展开
+        if (_gameMode) return;
         if (_expanded) return;
         _expanded = true;
         if (byUser) _pinned = true;
@@ -596,6 +677,7 @@ public partial class NotchWindow : Window
 
     public void ToggleByUser()
     {
+        if (_gameMode) return;   // 游戏里托盘双击也不许把刘海唤出来
         if (_expanded) { _pinned = false; Collapse("user-toggle"); }
         else Expand(true, "user-toggle");
     }
@@ -661,6 +743,7 @@ public partial class NotchWindow : Window
 
     private void OnHotKeyPressed()
     {
+        if (_gameMode) return;   // 游戏里吞掉热键，绝不弹出刘海打断游戏
         if (_hotKey.Capturing) return;
 
         Log.Write("hotkey: 触发");
@@ -1709,6 +1792,13 @@ public partial class NotchWindow : Window
         if (Store.Config.PlaySound)
         {
             try { SystemSounds.Exclamation.Play(); } catch { }
+        }
+
+        // 游戏模式下只发托盘气泡，绝不进提醒态、不弹刘海去打断全屏游戏
+        if (_gameMode)
+        {
+            (Application.Current as App)?.ShowBalloon("NotchDock 待办提醒", item.Title);
+            return;
         }
 
         _alertMode = true;          // 提醒态：鼠标不在刘海上也保持 8 秒

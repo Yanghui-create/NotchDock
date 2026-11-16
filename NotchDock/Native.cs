@@ -10,6 +10,23 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MONITORINFO
+    {
+        public uint cbSize;
+        public RECT Monitor;
+        public RECT WorkArea;
+        public uint Flags;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, out MONITORINFO lpmi);
+
+    public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct SHFILEINFO
     {
@@ -65,14 +82,18 @@ internal static class Native
     public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value);
 
     public const int GWL_EXSTYLE = -20;
+    public const int GWL_STYLE = -16;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_NOACTIVATE = 0x08000000;
+    public const long WS_CAPTION = 0x00C00000L;
+    public const long WS_THICKFRAME = 0x00040000L;
 
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
         int x, int y, int cx, int cy, uint flags);
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
+    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
 
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
@@ -80,6 +101,7 @@ internal static class Native
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_NOOWNERZORDER = 0x0200;
     public const uint SWP_SHOWWINDOW = 0x0040;
+    public const uint SWP_HIDEWINDOW = 0x0080;
 
     public const uint SHGFI_ICON = 0x000000100;
     public const uint SHGFI_LARGEICON = 0x000000000;
