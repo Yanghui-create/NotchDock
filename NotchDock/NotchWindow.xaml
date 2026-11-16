@@ -740,7 +740,7 @@
                                    Foreground="{DynamicResource FgBrush}" />
                         <TextBlock FontSize="11.5" Foreground="{DynamicResource FgMuteBrush}"
                                    TextWrapping="Wrap" LineHeight="18" Margin="0,5,0,0"
-                                   Text="Windows 自带的「剪贴板历史」也用 Win+V。这里用 RegisterHotKey 把这组键注册过来，系统那套面板就不会再弹出来。若状态栏显示「被占用」，说明有别的软件抢先注册了（或在系统设置里打开了剪贴板历史），换一组键即可。" />
+                                   Text="若显示「被占用」：最常见的元凶是 Windows 自带的剪贴板历史——去 设置 → 系统 → 剪贴板 关掉「剪贴板历史记录」，回来点「恢复默认」就能拿回 Win+V；否则就是别的软件抢先注册了，换录一组键即可，失败时会直接告诉你哪个键当下可用。" />
                       </StackPanel>
                     </Border>
 

@@ -760,7 +760,7 @@ public partial class NotchWindow : Window
         if (TrySaveHotKey(HotKey.WinV))
             FlashHint("已接管 Win+V，按下即可呼出剪贴板");
         else
-            FlashHint("Win+V 被占用了，换个快捷键试试");
+            FlashHint(HotKeyFailureHint(HotKey.WinV, "Win+V 被占用"), 4.5);
     }
 
     public void ShowSettings()
@@ -886,19 +886,55 @@ public partial class NotchWindow : Window
 
     private bool TrySaveHotKey(HotKey hk)
     {
+        var previous = Store.Config.HotKey;
         Store.Config.HotKey = hk.Display;
         Store.Config.HotKeyEnabled = true;
 
         if (!_hotKey.TryApply(hk, out var error))
         {
+            Store.Config.HotKey = previous;   // 没注册成功就不改配置，别把占不到的键留在设置里
             RefreshHotKeyUi();
-            FlashHint(error ?? "注册失败");
+            FlashHint(HotKeyFailureHint(hk, error), 4.5);
             return false;
         }
 
         if (!_previewMode) Store.Save();
         RefreshHotKeyUi();
         return true;
+    }
+
+    private static readonly HotKey[] FallbackKeys =
+    {
+        new(HotKeyMods.Ctrl | HotKeyMods.Alt, 0x56),   // Ctrl+Alt+V
+        new(HotKeyMods.Ctrl | HotKeyMods.Alt, 0x42),   // Ctrl+Alt+B
+        new(HotKeyMods.Ctrl | HotKeyMods.Alt, 0x4E),   // Ctrl+Alt+N
+        new(HotKeyMods.Alt, 0x56),                     // Alt+V
+        new(HotKeyMods.Ctrl | HotKeyMods.Alt, 0x43),   // Ctrl+Alt+C
+    };
+
+    /// <summary>探测一个当前没被占用的组合键（注册后立即注销，不影响已有注册）</summary>
+    private static HotKey? FindFreeAlternative(HotKey exclude)
+    {
+        foreach (var hk in FallbackKeys)
+        {
+            if (hk.Equals(exclude)) continue;
+            if (Native.RegisterHotKey(IntPtr.Zero, 0x4E45, (uint)hk.Mods | Native.MOD_NOREPEAT, hk.Vk))
+            {
+                Native.UnregisterHotKey(IntPtr.Zero, 0x4E45);
+                return hk;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>注册失败的提示：直接给一个当下可用的备选键，别让用户一个个试</summary>
+    private string HotKeyFailureHint(HotKey hk, string? error)
+    {
+        var reason = error ?? "注册失败";
+        var alt = FindFreeAlternative(hk);
+        return alt is { } suggestion
+            ? $"{reason}，试试 {suggestion.Pretty}"
+            : reason;
     }
 
     private void HotKeyToggle_Click(object sender, RoutedEventArgs e) => ToggleHotKey();
@@ -1074,7 +1110,7 @@ public partial class NotchWindow : Window
     /// 瞬时提示。速览页有自己的提示条，剪贴板页也放了一条——
     /// 以前 FlashHint 只写 FavHint，在剪贴板页点「清空 / 固定」时用户根本看不到反馈。
     /// </summary>
-    private void FlashHint(string text)
+    private void FlashHint(string text, double seconds = 2.2)
     {
         if (FavHint != null) FavHint.Text = text;
 
@@ -1084,7 +1120,7 @@ public partial class NotchWindow : Window
             ClipHintBox.Visibility = Visibility.Visible;
 
             _hintTimer?.Stop();
-            _hintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
+            _hintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
             _hintTimer.Tick += (_, _) =>
             {
                 _hintTimer.Stop();
@@ -1093,7 +1129,7 @@ public partial class NotchWindow : Window
             _hintTimer.Start();
         }
 
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
